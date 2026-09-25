@@ -75,21 +75,86 @@ deletes them at the end.
 
 ### Managing resources
 
-Resource commands print the status line and headers to stderr and the
-pretty-printed JSON body to stdout, so you can pipe the output into `jq`.
+Resources are addressed by **type name and id**. The type can be the name
+from `scimcheck types` (`User`), its endpoint (`Users`, `/scim/v2/Users`), or
+any case of either. The tool looks the name up in `/ResourceTypes`, so custom
+resource types work the same way as User and Group. A literal path such as
+`Users/2819c223` or `Schemas/urn:...` is sent as is.
+
+#### Discover what the server has
 
 ```
-scimcheck get ServiceProviderConfig
-scimcheck get Users/2819c223 --attributes userName,emails
-scimcheck list Users --filter 'userName sw "b"' --sort-by userName --count 10
-scimcheck search Groups --filter 'displayName eq "Admins"'      # POST /Groups/.search
+$ scimcheck types
+NAME   ENDPOINT         SCHEMA                                       EXTENSIONS
+User   /scim/v2/Users   urn:ietf:params:scim:schemas:core:2.0:User   urn:ietf:params:scim:schemas:extension:enterprise:2.0:User
+Group  /scim/v2/Groups  urn:ietf:params:scim:schemas:core:2.0:Group
 
-scimcheck create Users --file user.json
-echo '{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}' | scimcheck create Users
-scimcheck replace Users/2819c223 --file user.json --if-match 'W/"3694e05e9dff590"'
-scimcheck patch Users/2819c223 --op replace --path active --value false
-scimcheck patch Groups/e9e30dba --file patch.json
-scimcheck delete Users/2819c223
+scimcheck get ServiceProviderConfig     # supported features
+scimcheck get Schemas                   # attribute definitions
+```
+
+#### List
+
+```
+$ scimcheck list -o table               # every resource of every type, all pages
+TYPE   ID                                    NAME
+User   01a0d724-e711-7d80-8a85-8ab628d24f63  amy
+User   01a0d724-e71e-7111-9f9a-f2a590ab57b8  ben
+Group  01a0d71e-cd1c-7900-ba32-fac3a277eed6  Admins
+
+scimcheck list User                     # one page, the raw ListResponse
+scimcheck list User --all               # every page, one resource per line
+scimcheck list User --all --count 500   # --count is the page size with --all
+scimcheck list Group --filter 'displayName sw "eng"' --sort-by displayName -o table
+scimcheck search User --filter 'emails[type eq "work"]' --all   # POST /Users/.search
+scimcheck search --filter 'meta.lastModified gt "2026-01-01T00:00:00Z"'   # POST /.search across all types
+```
+
+`--all` follows `startIndex` until `totalResults` is reached. `list` without a
+type implies `--all` across every type from `/ResourceTypes`. It also adds
+`meta.resourceType` to any resource that is missing it, so output that mixes
+types stays unambiguous.
+
+#### Create, read, update, delete
+
+```
+scimcheck create User --file bjensen.json
+echo '{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"Admins"}' | scimcheck create Group
+
+scimcheck get User 2819c223
+scimcheck get User 2819c223 --attributes userName,emails
+
+scimcheck replace User 2819c223 --file bjensen.json --if-match 'W/"3694e05e9dff590"'
+
+scimcheck patch User 2819c223 --op replace --path active --value false
+scimcheck patch Group e9e30dba --op add --path members --value '[{"value":"2819c223"}]'
+scimcheck patch Group e9e30dba --op remove --path 'members[value eq "2819c223"]'
+scimcheck patch User 2819c223 --file ops.json          # a full PatchOp document
+
+scimcheck delete User 2819c223
+```
+
+Request bodies come from `--data`, `--file` (`-` for stdin), or stdin.
+
+#### Output
+
+| `-o`    | Prints | Default for |
+|---------|--------|-------------|
+| `json`  | pretty JSON: the response, or one array for `--all` | single requests |
+| `jsonl` | one compact resource per line | `--all`, `list` with no type |
+| `table` | aligned `TYPE`, `ID`, `NAME` columns | `types` |
+| `ids`   | one id per line | |
+
+Data goes to stdout. The status line, `ETag`, `Location` and error bodies go to
+stderr. The exit status is 0 on success, 1 for an HTTP error or an
+unreachable server, and 2 for a usage error. The formats compose with other
+tools:
+
+```
+scimcheck list User --filter 'active eq false' --all -o ids |
+  xargs -n1 scimcheck delete User                      # delete every inactive user
+scimcheck list --all | jq -s 'group_by(.meta.resourceType) | map({(.[0].meta.resourceType): length}) | add'
+ID=$(scimcheck create User --file u.json -o ids)
 ```
 
 ## How it is built
@@ -98,10 +163,13 @@ This is the part to read if you want to build something similar or add checks.
 
 ```
 src/
-  main.zig     argument parsing and the resource commands
-  Client.zig   SCIM-flavoured wrapper around std.http.Client
-  json.zig     case-insensitive lookups over std.json.Value
-  check.zig    the conformance suite
+  main.zig      entry point: builds the client and dispatches
+  args.zig      flags and help text
+  commands.zig  resource commands, type-name resolution, paging
+  output.zig    json / jsonl / table / ids rendering
+  Client.zig    SCIM-flavoured wrapper around std.http.Client
+  json.zig      case-insensitive lookups over std.json.Value
+  check.zig     the conformance suite
 ```
 
 ### 1. An HTTP client that keeps the headers SCIM cares about
