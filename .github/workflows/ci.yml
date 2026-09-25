@@ -15,9 +15,7 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
-      - run: zig fmt --check .
-      - run: zig build test --summary all
-      - run: zig build
+      - run: zig build ci --summary all
       # Run the conformance suite against the scim-go example server.
       - uses: actions/setup-go@v5
         with:

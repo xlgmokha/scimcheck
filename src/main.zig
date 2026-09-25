@@ -94,10 +94,11 @@ pub fn main(init: std.process.Init) !u8 {
 }
 
 test {
-    _ = Client;
-    _ = args_;
-    _ = check;
-    _ = commands;
-    _ = @import("json.zig");
-    _ = @import("output.zig");
+    // Analyze every declaration, including ones nothing calls yet.
+    std.testing.refAllDecls(Client);
+    std.testing.refAllDecls(args_);
+    std.testing.refAllDecls(check);
+    std.testing.refAllDecls(commands);
+    std.testing.refAllDecls(@import("json.zig"));
+    std.testing.refAllDecls(@import("output.zig"));
 }

@@ -27,6 +27,9 @@ library: `std.http.Client` for HTTP and TLS, and `std.json` for JSON.
 ```
 zig build                 # builds zig-out/bin/scimcheck
 zig build test            # unit tests
+zig build fmt             # format the source
+zig build lint            # fail if anything is unformatted
+zig build ci              # lint + tests + build, exactly what CI runs
 zig build run -- --help
 zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-linux-musl   # static binary
 ```
