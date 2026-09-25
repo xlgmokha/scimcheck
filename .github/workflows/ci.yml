@@ -26,4 +26,7 @@ jobs:
       - run: |
           SCIM_BEARER_TOKEN=secret PORT=8080 "$(go env GOPATH)/bin/server" &
           for _ in $(seq 1 30); do curl -sf -o /dev/null -H 'Authorization: Bearer secret' http://localhost:8080/scim/v2/ServiceProviderConfig && break; sleep 1; done
-          ./zig-out/bin/scimcheck --url http://localhost:8080/scim/v2 --token secret check
+          # Exit 1 means scim-go failed a MUST check; anything else is a scimcheck bug.
+          ./zig-out/bin/scimcheck --url http://localhost:8080/scim/v2 --token secret check > report.txt || [ $? -eq 1 ]
+          cat report.txt
+          ! grep -q '\[transport\]' report.txt

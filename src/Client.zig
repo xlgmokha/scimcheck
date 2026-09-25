@@ -26,6 +26,8 @@ pub const Options = struct {
     /// Send the `Authorization` header. Disabled to check that the
     /// service provider rejects anonymous requests.
     authenticate: bool = true,
+    /// Sends this `Authorization` value instead of the configured one.
+    authorization: ?[]const u8 = null,
     if_match: ?[]const u8 = null,
     if_none_match: ?[]const u8 = null,
     content_type: []const u8 = media_type,
@@ -37,6 +39,8 @@ pub const Response = struct {
     location: ?[]const u8 = null,
     etag: ?[]const u8 = null,
     www_authenticate: ?[]const u8 = null,
+    content_location: ?[]const u8 = null,
+    allow: ?[]const u8 = null,
     body: []const u8,
 
     /// Parses the body as JSON. Returns null when the body is empty or not JSON.
@@ -99,13 +103,15 @@ pub fn send(c: *Client, arena: Allocator, method: http.Method, target: []const u
     if (options.if_match) |v| try extra.append(arena, .{ .name = "If-Match", .value = v });
     if (options.if_none_match) |v| try extra.append(arena, .{ .name = "If-None-Match", .value = v });
 
-    const authorization: http.Client.Request.Headers.Value = if (!options.authenticate)
+    const authorization: http.Client.Request.Headers.Value = if (options.authorization) |a|
+        .{ .override = a }
+    else if (!options.authenticate)
         .omit
     else if (c.authorization) |a| .{ .override = a } else .omit;
 
     if (c.trace) |w| {
         try w.print("> {s} {s}\n", .{ @tagName(method), url });
-        if (options.body) |b| try w.print("{s}\n", .{b});
+        if (options.body) |b| try w.print("{s}{s}\n", .{ b[0..@min(b.len, 4096)], if (b.len > 4096) "..." else "" });
         try w.flush();
     }
 
@@ -142,6 +148,10 @@ pub fn send(c: *Client, arena: Allocator, method: http.Method, target: []const u
             result.etag = try arena.dupe(u8, h.value);
         } else if (std.ascii.eqlIgnoreCase(h.name, "www-authenticate")) {
             result.www_authenticate = try arena.dupe(u8, h.value);
+        } else if (std.ascii.eqlIgnoreCase(h.name, "content-location")) {
+            result.content_location = try arena.dupe(u8, h.value);
+        } else if (std.ascii.eqlIgnoreCase(h.name, "allow")) {
+            result.allow = try arena.dupe(u8, h.value);
         }
     }
 

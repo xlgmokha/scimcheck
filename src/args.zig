@@ -3,7 +3,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-pub const version = "0.2.0";
+pub const version = "0.3.0";
 
 pub const usage =
     \\scimcheck - test and manage SCIM 2.0 service providers (RFC 7643, RFC 7644)
@@ -51,7 +51,8 @@ pub const usage =
     \\  --all       Follow pages until every result has been read
     \\
     \\Check sections (for --only, comma separated):
-    \\  auth, errors, users, attributes, filter, pagination, sort, patch, etag, groups, bulk
+    \\  auth, errors, users, extensions, attributes, filter, search, pagination,
+    \\  sort, patch, etag, groups, bulk
     \\
     \\Examples:
     \\  scimcheck -u http://localhost:8080/scim/v2 -t secret check

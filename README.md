@@ -7,16 +7,16 @@ and lets you manage its resources.
 ```
 $ scimcheck --url http://localhost:8080/scim/v2 --token secret check
 
-Discovery (RFC 7644 §4)
+Discovery (RFC 7644 §4, RFC 7643 §5-7)
   PASS  GET /ServiceProviderConfig returns 200 [RFC7644 §4]
-  PASS  Content-Type is application/scim+json [RFC7644 §3.1]
+  PASS  schema urn:ietf:params:scim:schemas:core:2.0:User attribute definitions are well formed [RFC7643 §7]
   ...
-Filtering (RFC 7644 §3.4.2.2)
-  PASS  eq on userName is case-insensitive (caseExact false) [RFC7644 §3.4.2.2]
-  WARN  POST /Users/.search returns 200 [RFC7644 §3.4.3]
-        got HTTP 405: {"schemas":["urn:ietf:params:scim:api:messages:2.0:Error"],...}
+Sorting (RFC 7644 §3.4.2.3)
+  PASS  sortBy a sub-attribute (name.givenName) [RFC7644 §3.4.2.3]
+  FAIL  sortBy a multi-valued attribute uses the primary value [RFC7644 §3.4.2.3]
+        got HTTP 400: {"schemas":["urn:ietf:params:scim:api:messages:2.0:Error"],"scimType":"invalidValue",...}
 ...
-174 passed, 0 failed, 4 warnings, 0 skipped
+449 passed, 1 failed, 13 warnings, 4 info, 1 skipped
 ```
 
 ## Build
@@ -49,8 +49,18 @@ scimcheck check --keep                 # keep the test resources
 scimcheck -v check                     # print every HTTP exchange to stderr
 ```
 
+Every check is graded by the RFC 2119 keyword behind it:
+
+| Result | Meaning |
+|--------|---------|
+| `FAIL` | a MUST / SHALL / REQUIRED is violated; the exit status becomes 1 |
+| `WARN` | a SHOULD / RECOMMENDED is not followed |
+| `INFO` | an optional (MAY) feature is not supported |
+| `SKIP` | the check cannot run, e.g. the feature is disabled in `/ServiceProviderConfig` |
+
 The exit status is 1 if any MUST check fails, which makes `check` usable in CI.
-A failed SHOULD check prints `WARN` and does not change the exit status.
+[COVERAGE.md](COVERAGE.md) maps every section of RFC 7643 and RFC 7644 to the
+checks that verify it, and lists what cannot be tested from outside a server.
 Before it runs anything else, `check` reads `/ServiceProviderConfig` and
 `/ResourceTypes`. It skips features the server says it does not support and
 uses the endpoints the server advertises.
@@ -58,20 +68,22 @@ uses the endpoints the server advertises.
 Each run creates its own resources, named `scimcheck-<run id>-...`, and
 deletes them at the end.
 
-| Section      | What it verifies |
-|--------------|------------------|
-| discovery    | `/ServiceProviderConfig`, `/ResourceTypes`, `/Schemas` shape; 403 for filters on discovery endpoints |
-| auth         | 401 plus `WWW-Authenticate` without credentials |
-| errors       | Error schema, `status` as a string, `scimType` for 404/400 cases |
-| users        | POST/GET/PUT/DELETE, 201 + `Location`, `meta.*`, 409 `uniqueness`, password never returned |
-| attributes   | `attributes` / `excludedAttributes`, `id` always returned |
-| filter       | `eq`, `sw`, `co`, `ew`, `pr`, `gt`, `and`/`or`/`not`, value paths, case rules, 400 `invalidFilter`, `POST /.search` |
-| pagination   | `startIndex`, `count`, `count=0`, out of range values |
-| sort         | `sortBy`, `sortOrder` |
-| patch        | add/replace/remove with and without paths and value filters, `noTarget`, `invalidPath`, `mutability` |
-| etag         | `ETag`/`meta.version`, `If-None-Match` 304, `If-Match` 412 |
-| groups       | membership, PATCH add/remove members, `User.groups` |
-| bulk         | a bulk create, or 501 when bulk is unsupported |
+| Section    | What it verifies |
+|------------|------------------|
+| discovery  | `/ServiceProviderConfig`, `/ResourceTypes` and `/Schemas` shape; every attribute definition against RFC 7643 §7; ResourceType ↔ Schema references; single-item and unknown lookups; 403 for filters |
+| auth       | 401 without credentials, with an invalid token, or with another scheme; `WWW-Authenticate` and RFC 6750 error codes |
+| errors     | 404 for GET/PUT/PATCH/DELETE of unknown resources; 400 for malformed JSON, missing required attributes, missing or unknown `schemas`, wrong types; 405 + `Allow`; `/Me`; 413; Error schema and `scimType` values |
+| users      | create/read/replace/delete, `Location` / `Content-Location` / `meta.*`, 409 `uniqueness` (case-insensitive), readOnly input ignored, case-insensitive attribute names, `application/json`, one primary value, PUT clearing omitted attributes |
+| extensions | the enterprise extension: storage, `schemas`, filtering, sorting, projection, PATCH by URN path, removal by PUT |
+| attributes | `attributes` / `excludedAttributes` on GET, list, POST, PUT and PATCH; sub-attributes, URN-qualified names, `returned: always / never` |
+| filter     | every operator (`eq ne co sw ew pr gt ge lt le`), `and`/`or`/`not`, precedence and grouping, value paths, sub-attribute and URN paths, booleans, dateTimes, `caseExact`, and six kinds of invalid filters |
+| search     | `POST /.search` with filter, attributes, paging and sorting; root queries |
+| pagination | `startIndex`, `count`, `itemsPerPage`, `totalResults`, out-of-range values, `maxResults`, a full page walk |
+| sort       | `sortBy` on attributes, sub-attributes, multi-valued attributes, URN names; `sortOrder`; sorting with paging |
+| patch      | add/replace/remove with and without paths, value filters and sub-attributes, multi-valued and primary rules, ordering, atomicity, and every error code |
+| etag       | ETag syntax and stability, `meta.version`, `If-None-Match` 304, `If-Match` 412 on PUT/PATCH/DELETE, `If-Match: *` |
+| groups     | membership, member `type` and `$ref`, member filters, PATCH add/remove/replace members, immutable members, PUT, `User.groups`, referential integrity |
+| bulk       | bulkId references, `failOnErrors`, `maxOperations` → 413, or 501 when unsupported |
 
 ### Managing resources
 
@@ -217,40 +229,48 @@ _ = s.check(.must, "RFC7644 §3.3", res.location != null,
     "201 response includes a Location header", null);
 ```
 
-- `level` is `.must` or `.should`, matching the RFC 2119 keyword in the spec.
-  A failed `.must` check fails the run; a failed `.should` check prints a warning.
+- `level` is `.must`, `.should` or `.may`, matching the RFC 2119 keyword in
+  the spec. A failed `.must` check fails the run; the others print `WARN` or `INFO`.
 - `ref` is the section the check verifies, printed on every line, so a
   failure tells you which part of the RFC to read.
 - Helpers built on top of it (`expectStatus`, `expectError`, `expectList`,
   `expectCount`, `expectPatch`) keep each section short and readable.
 
-Sections are plain functions registered in `Suite.run`. Shared fixtures (three
-users named so that they sort alice < bob < carol) are created once, on
-demand, by `requireFixtures`. Every created resource is recorded and deleted
+`src/check.zig` holds this machinery. Each section is a `run(*Suite)`
+function in its own file under `src/checks/`, listed in the `Section` enum.
+Shared fixtures are created once, on demand, by `requireFixtures`: three
+users that sort alice < bob < carol by userName but bob < carol < alice by
+`name.givenName` and by primary email, so every `sortBy` is distinguishable. Every created resource is recorded and deleted
 in reverse order at the end, so groups are deleted before their members.
 
 ### 4. Adding a check
 
 Find the RFC requirement, decide whether it is a MUST or a SHOULD, and add it
-to the matching section in `src/check.zig`:
+to the matching file in `src/checks/`:
 
 ```zig
 if (s.send(.GET, s.fmt("{s}?attributes=name.givenName", .{f[0].path}), .{})) |res| {
     if (s.expectStatus(.must, ref, res, .ok, "GET with attributes=name.givenName returns 200")) {
-        const body = res.json(s.arena);
+        const body = s.json(res);
         _ = s.check(.must, ref, j.path(body, "name.givenName") != null and j.path(body, "name.familyName") == null,
             "sub-attribute selection omits sibling sub-attributes", res.body);
     }
 }
 ```
 
-For a new section, add a variant to `Section` with a title and register its
-function in `Suite.run`.
+For a new section, add a file with a `pub fn run(s: *Suite) void` and a
+variant to `Section` in `src/check.zig` with its title and file.
+
+`json.path` understands RFC 7644 §3.10 notation, so
+`j.path(body, "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.value")`
+reads extension attributes.
 
 ### 5. Testing against a real server
 
 The CI workflow builds the [scim-go][scim-go] example server and runs
-`scimcheck check` against it. Locally:
+`scimcheck check` against it. That step fails only if scimcheck crashes or
+reports a transport error, not when scim-go fails a conformance check, so a
+gap in the server doesn't block changes to the tool. Locally:
 
 ```
 go install github.com/supabase-community/scim-go/cmd/server@main

@@ -19,11 +19,19 @@ pub fn field(v: ?Value, name: []const u8) ?Value {
     return null;
 }
 
-/// Follows a dotted attribute path such as `meta.location` or `name.givenName`.
-/// Extension attributes can be reached by passing the schema URN as a single
-/// segment via `field`.
-pub fn path(v: ?Value, dotted: []const u8) ?Value {
+/// Follows an attribute path such as `meta.location` or `name.givenName`.
+/// A URN prefix in RFC 7644 §3.10 notation selects an extension, e.g.
+/// `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.value`.
+/// A core schema URN prefix resolves against the resource itself.
+pub fn path(v: ?Value, attr_path: []const u8) ?Value {
     var current = v;
+    var dotted = attr_path;
+    if (std.ascii.startsWithIgnoreCase(attr_path, "urn:")) {
+        const colon = std.mem.findScalarLast(u8, attr_path, ':').?;
+        const schema = attr_path[0..colon];
+        dotted = attr_path[colon + 1 ..];
+        if (field(v, schema)) |extension| current = extension;
+    }
     var it = std.mem.splitScalar(u8, dotted, '.');
     while (it.next()) |segment| current = field(current, segment);
     return current;
@@ -90,6 +98,7 @@ test field {
     try std.testing.expectEqualStrings("bjensen", string(field(v, "USERNAME")).?);
     try std.testing.expectEqualStrings("/Users/1", string(path(v, "meta.location")).?);
     try std.testing.expect(path(v, "meta.missing.deeper") == null);
+    try std.testing.expectEqualStrings("bjensen", string(path(v, "urn:ietf:params:scim:schemas:core:2.0:User:userName")).?);
     try std.testing.expect(hasSchema(v, "urn:ietf:params:scim:schemas:core:2.0:user"));
     try std.testing.expect(!hasSchema(v, "urn:ietf:params:scim:schemas:core:2.0:Group"));
     try std.testing.expectEqual(@as(i64, 2), integer(field(v, "count")).?);
