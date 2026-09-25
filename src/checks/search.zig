@@ -15,8 +15,9 @@ pub fn run(s: *Suite) void {
     const anchor = s.fmt("userName sw \"{s}\"", .{s.fixturePrefix()});
 
     const first = s.send(.POST, search, .{ .body = request(s, s.fmt("\"filter\":{f}", .{std.json.fmt(s.fmt("userName eq \"{s}\"", .{f[1].user_name}), .{})})) }) orelse return;
-    // Clients MAY search with POST, so support is a SHOULD rather than a MUST.
-    if (!s.expectStatus(.should, ref, first, .ok, "POST /Users/.search returns 200")) {
+    // RFC 7644 §3.4.3 makes POST queries optional ("Clients MAY"); once
+    // supported, the SearchRequest rules below are MUSTs.
+    if (!s.expectStatus(.may, ref, first, .ok, "POST /Users/.search is supported")) {
         s.skip("the remaining POST /.search checks");
     } else {
         if (s.expectList(ref, first, "POST /Users/.search returns a ListResponse")) |body| {

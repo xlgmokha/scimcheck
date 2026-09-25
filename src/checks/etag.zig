@@ -29,7 +29,8 @@ pub fn run(s: *Suite) void {
     }
 
     if (s.send(.GET, fixture.path, .{ .if_none_match = tag })) |r| {
-        if (s.expectStatus(.should, "RFC7232 §3.2", r, .not_modified, "If-None-Match with the current ETag returns 304")) {
+        // Conditional retrieval is optional (RFC 7644 §3.14 shows it as an example).
+        if (s.expectStatus(.may, "RFC7644 §3.14", r, .not_modified, "If-None-Match with the current ETag returns 304")) {
             _ = s.check(.must, "RFC7232 §4.1", r.body.len == 0, "  a 304 response has no body", null);
         }
     }
