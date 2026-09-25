@@ -16,7 +16,7 @@ Sorting (RFC 7644 §3.4.2.3)
   FAIL  sortBy a multi-valued attribute uses the primary value [RFC7644 §3.4.2.3]
         got HTTP 400: {"schemas":["urn:ietf:params:scim:api:messages:2.0:Error"],"scimType":"invalidValue",...}
 ...
-449 passed, 1 failed, 13 warnings, 4 info, 1 skipped
+449 passed, 1 failed, 11 warnings, 6 info, 1 skipped
 ```
 
 ## Build
