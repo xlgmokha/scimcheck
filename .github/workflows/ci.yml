@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - run: zig fmt --check .
+      - run: zig build test --summary all
+      - run: zig build
+      # Run the conformance suite against the scim-go example server.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go install github.com/supabase-community/scim-go/cmd/server@main
+      - run: |
+          SCIM_BEARER_TOKEN=secret PORT=8080 "$(go env GOPATH)/bin/server" &
+          for _ in $(seq 1 30); do curl -sf -o /dev/null -H 'Authorization: Bearer secret' http://localhost:8080/scim/v2/ServiceProviderConfig && break; sleep 1; done
+          ./zig-out/bin/scimcheck --url http://localhost:8080/scim/v2 --token secret check
