@@ -1,0 +1,47 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        target:
+          - x86_64-linux-musl
+          - aarch64-linux-musl
+          - x86_64-macos
+          - aarch64-macos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - run: zig build -Doptimize=ReleaseSafe -Dtarget=${{ matrix.target }}
+      - run: |
+          mkdir -p dist
+          cp zig-out/bin/scimcheck dist/scimcheck-${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scimcheck-${{ matrix.target }}
+          path: dist/scimcheck-${{ matrix.target }}
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - run: |
+          mkdir -p release
+          find dist -type f -exec cp {} release/ \;
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${{ github.ref_name }} release/* --generate-notes
