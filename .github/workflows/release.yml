@@ -44,4 +44,4 @@ jobs:
           find dist -type f -exec cp {} release/ \;
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create ${{ github.ref_name }} release/* --generate-notes
+        run: gh release create ${{ github.ref_name }} release/* -R ${{ github.repository }} --generate-notes
