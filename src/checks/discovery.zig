@@ -5,6 +5,7 @@ const Value = std.json.Value;
 
 const check = @import("../check.zig");
 const j = @import("../json.zig");
+const Client = @import("../Client.zig");
 const Suite = check.Suite;
 const urn = check.urn;
 const eql = check.eql;
@@ -71,6 +72,7 @@ fn resourceTypes(s: *Suite) []const Value {
     const resources = j.array(j.field(body, "Resources")) orelse &.{};
     var ok = true;
     var extensions_ok = true;
+    var not_relative: ?[]const u8 = null;
     var has_group = false;
     for (resources) |rt| {
         const name = j.string(j.field(rt, "name")) orelse "";
@@ -80,6 +82,7 @@ fn resourceTypes(s: *Suite) []const Value {
             extensions_ok = extensions_ok and j.string(j.field(ext, "schema")) != null and j.boolean(j.field(ext, "required")) != null;
         }
         const e = endpoint orelse continue;
+        if (Client.isAbsolute(e) or s.client.isUnderBasePath(e)) not_relative = not_relative orelse e;
         if (std.mem.eql(u8, name, "User")) {
             s.users_endpoint = e;
             s.enterprise_user = j.findBy(j.array(j.field(rt, "schemaExtensions")), "schema", urn.enterprise_user) != null;
@@ -91,6 +94,7 @@ fn resourceTypes(s: *Suite) []const Value {
     }
     _ = s.check(.must, ref, ok and resources.len > 0, "each ResourceType has schemas, name, endpoint and schema", null);
     _ = s.check(.must, ref, extensions_ok, "each schemaExtension has schema and a boolean required", null);
+    _ = s.check(.must, ref, not_relative == null, "each ResourceType endpoint is relative to the base URL", if (not_relative) |e| s.fmt("got endpoint {s}", .{e}) else null);
     if (!has_group) s.groups_endpoint = null;
     s.print("      endpoints: users={s} groups={s} enterprise extension={}\n", .{ s.users_endpoint, s.groups_endpoint orelse "(none)", s.enterprise_user });
     return resources;

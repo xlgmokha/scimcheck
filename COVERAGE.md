@@ -57,7 +57,7 @@ or configuration a client cannot see.
 | 4.2 | Group | groups, discovery | `displayName` required; members' `value`, `type` and `$ref`; membership changes |
 | 4.3 | Enterprise User | extensions | `employeeNumber`, `department`, `costCenter`, `manager.value` |
 | 5 | ServiceProviderConfig | discovery | every feature flag, `maxResults`, bulk limits, authentication schemes |
-| 6 | ResourceType | discovery | required attributes, `schemaExtensions`, and references into `/Schemas` |
+| 6 | ResourceType | discovery | required attributes, `endpoint` relative to the base URL, `schemaExtensions`, and references into `/Schemas` |
 | 7 | Schema definitions | discovery | every attribute definition: types, flags, `mutability`, `returned`, `uniqueness`, `subAttributes`, `referenceTypes`, no nested complex attributes |
 | 8 | JSON examples | none | Not covered: the examples are documentation. scim-go checks them itself in `pkg/scimtest`. |
 
