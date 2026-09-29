@@ -216,7 +216,7 @@ fn isLiteralPath(first: []const u8) bool {
     const head = std.mem.trimStart(u8, first, "/");
     for (fixed) |f| if (std.ascii.eqlIgnoreCase(head, f) or
         (std.ascii.startsWithIgnoreCase(head, f) and head.len > f.len and head[f.len] == '/')) return true;
-    if (std.mem.startsWith(u8, first, "http://") or std.mem.startsWith(u8, first, "https://")) return true;
+    if (Client.isAbsolute(first)) return true;
     // `Users/2819c223` is already a resource path.
     return std.mem.findScalar(u8, std.mem.trimEnd(u8, head, "/"), '/') != null;
 }

@@ -71,23 +71,33 @@ pub fn deinit(c: *Client) void {
 /// Resolves `target` against the base URL. Absolute URLs are returned as is,
 /// which lets callers follow `meta.location` and `Location` headers.
 pub fn resolve(c: *const Client, arena: Allocator, target: []const u8) ![]const u8 {
-    if (std.mem.startsWith(u8, target, "http://") or std.mem.startsWith(u8, target, "https://"))
-        return target;
+    if (isAbsolute(target)) return target;
     // A server may return locations relative to its host, e.g. `/scim/v2/Users/1`.
     // Resolve those against the origin rather than the base path.
-    if (std.mem.startsWith(u8, target, "/")) {
-        const scheme_end = (std.mem.find(u8, c.base_url, "://") orelse 0) + 3;
-        if (std.mem.findScalarPos(u8, c.base_url, scheme_end, '/')) |i| {
-            const origin = c.base_url[0..i];
-            const base_path = c.base_url[i..];
-            if (std.mem.startsWith(u8, target, base_path) and
-                (target.len == base_path.len or target[base_path.len] == '/' or target[base_path.len] == '?'))
-            {
-                return std.fmt.allocPrint(arena, "{s}{s}", .{ origin, target });
-            }
-        }
+    if (c.isUnderBasePath(target)) {
+        const origin = c.base_url[0 .. c.base_url.len - c.basePath().len];
+        return std.fmt.allocPrint(arena, "{s}{s}", .{ origin, target });
     }
     return std.fmt.allocPrint(arena, "{s}/{s}", .{ c.base_url, std.mem.trimStart(u8, target, "/") });
+}
+
+/// Reports whether `target` is an absolute `http` or `https` URL.
+pub fn isAbsolute(target: []const u8) bool {
+    return std.mem.startsWith(u8, target, "http://") or std.mem.startsWith(u8, target, "https://");
+}
+
+/// The path of the base URL, e.g. `/scim/v2`; empty when the base URL has no path.
+pub fn basePath(c: *const Client) []const u8 {
+    const scheme_end = (std.mem.find(u8, c.base_url, "://") orelse 0) + 3;
+    const i = std.mem.findScalarPos(u8, c.base_url, scheme_end, '/') orelse return "";
+    return c.base_url[i..];
+}
+
+/// Reports whether `target` is a host-relative path under the base path, e.g. `/scim/v2/Users/1`.
+pub fn isUnderBasePath(c: *const Client, target: []const u8) bool {
+    const base_path = c.basePath();
+    return base_path.len > 0 and std.mem.startsWith(u8, target, base_path) and
+        (target.len == base_path.len or target[base_path.len] == '/' or target[base_path.len] == '?');
 }
 
 pub fn get(c: *Client, arena: Allocator, target: []const u8) !Response {
@@ -211,6 +221,19 @@ test resolve {
 
     const root = Client.init(std.testing.allocator, std.testing.io, "http://localhost:8080", null);
     try std.testing.expectEqualStrings("http://localhost:8080/Users", try root.resolve(arena, "/Users"));
+}
+
+test isUnderBasePath {
+    const c = Client.init(std.testing.allocator, std.testing.io, "http://localhost:8080/scim/v2", null);
+    try std.testing.expectEqualStrings("/scim/v2", c.basePath());
+    try std.testing.expect(c.isUnderBasePath("/scim/v2/Users"));
+    try std.testing.expect(c.isUnderBasePath("/scim/v2"));
+    try std.testing.expect(!c.isUnderBasePath("/Users"));
+    try std.testing.expect(!c.isUnderBasePath("/scim/v2Users"));
+
+    const root = Client.init(std.testing.allocator, std.testing.io, "http://localhost:8080", null);
+    try std.testing.expectEqualStrings("", root.basePath());
+    try std.testing.expect(!root.isUnderBasePath("/Users"));
 }
 
 test queryEscape {
