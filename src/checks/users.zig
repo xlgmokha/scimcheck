@@ -36,8 +36,8 @@ pub fn run(s: *Suite) void {
     _ = s.check(.must, "RFC7643 §3", j.hasSchema(body, urn.user), "created User lists the core User schema", null);
     _ = s.check(.must, "RFC7643 §4.1", eql(j.string(j.field(body, "userName")), user_name), "created User echoes userName", null);
     _ = s.check(.must, "RFC7643 §3.1", eql(j.string(j.path(body, "meta.resourceType")), "User"), "meta.resourceType is User", null);
-    _ = s.check(.should, "RFC7643 §3.1", check.isDateTime(j.string(j.path(body, "meta.created"))), "meta.created is a dateTime", null);
-    _ = s.check(.should, "RFC7643 §3.1", check.isDateTime(j.string(j.path(body, "meta.lastModified"))), "meta.lastModified is a dateTime", null);
+    _ = s.check(.must, "RFC7643 §2.3.5", check.isDateTime(j.string(j.path(body, "meta.created"))), "meta.created is a dateTime", null);
+    _ = s.check(.must, "RFC7643 §2.3.5", check.isDateTime(j.string(j.path(body, "meta.lastModified"))), "meta.lastModified is a dateTime", null);
     _ = s.check(.must, "RFC7643 §4.1.1", j.field(body, "password") == null, "password is never returned", null);
     _ = s.check(.must, "RFC7643 §2.3.2", j.boolean(j.field(body, "active")) == true, "active is returned as a JSON boolean", null);
     if (s.caps.etag) {
