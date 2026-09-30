@@ -54,6 +54,7 @@ pub fn run(s: *Suite) void {
     queries(s, endpoint, display, f);
     if (s.caps.patch) patchMembers(s, path, f);
     replace(s, path, display, f);
+    immutableMemberPut(s, path);
     referentialIntegrity(s, path);
 
     if (s.send(.DELETE, path, .{})) |del| {
@@ -159,6 +160,36 @@ fn replace(s: *Suite, path: []const u8, display: []const u8, f: [3]check.Fixture
     if (s.fetch(ref, path)) |v| {
         _ = s.check(.must, ref, eql(j.string(j.field(v, "displayName")), display) and memberList(v).len == 2 and has(v, f[1].id) and has(v, f[2].id), "  displayName and members are replaced", null);
     }
+}
+
+/// RFC 7644 §3.5.1: an immutable sub-attribute already set MUST match on
+/// replacement, or 400 mutability SHOULD be returned. RFC 7643 §4.2: a
+/// Group member's type and $ref are immutable once set.
+fn immutableMemberPut(s: *Suite, path: []const u8) void {
+    const ref = "RFC7644 §3.5.1";
+    const v = s.fetch(ref, path) orelse return;
+    const members = memberList(v);
+    if (members.len == 0) return s.skip("no Group member to test immutability against");
+    const member = members[0];
+    const value_id = j.string(j.field(member, "value")) orelse return;
+    const display = j.string(j.field(v, "displayName")) orelse "";
+    if (j.string(j.field(member, "type"))) |t| {
+        const new_type = if (eql(t, "Group")) "User" else "Group";
+        const body = s.fmt("{{\"schemas\":[\"{s}\"],\"displayName\":{f},\"members\":[{{\"value\":{f},\"type\":{f}}}]}}", .{ urn.group, std.json.fmt(display, .{}), std.json.fmt(value_id, .{}), std.json.fmt(new_type, .{}) });
+        if (s.send(.PUT, path, .{ .body = body })) |r| {
+            s.expectError(.must, ref, r, .bad_request, "mutability", "PUT changing an existing member's type returns 400 mutability");
+        }
+        return;
+    }
+    if (j.string(j.field(member, "$ref"))) |old_ref| {
+        const new_ref = s.fmt("{s}-changed", .{old_ref});
+        const body = s.fmt("{{\"schemas\":[\"{s}\"],\"displayName\":{f},\"members\":[{{\"value\":{f},\"$ref\":{f}}}]}}", .{ urn.group, std.json.fmt(display, .{}), std.json.fmt(value_id, .{}), std.json.fmt(new_ref, .{}) });
+        if (s.send(.PUT, path, .{ .body = body })) |r| {
+            s.expectError(.must, ref, r, .bad_request, "mutability", "PUT changing an existing member's $ref returns 400 mutability");
+        }
+        return;
+    }
+    s.skip("no Group member sub-attribute (type/$ref) is set to test immutability against");
 }
 
 /// RFC 7644 §3.6: a service provider MAY remove references to a deleted resource.
