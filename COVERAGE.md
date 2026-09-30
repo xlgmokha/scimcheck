@@ -59,7 +59,7 @@ or configuration a client cannot see.
 | 4.3 | Enterprise User | extensions | `employeeNumber`, `department`, `costCenter`, `organization`, `division`, `manager.value`, `manager.$ref`, readOnly `manager.displayName` |
 | 5 | ServiceProviderConfig | discovery | every feature flag, `maxResults`, bulk limits, authentication schemes |
 | 6 | ResourceType | discovery | required attributes, `endpoint` relative to the base URL, `schemaExtensions`, and references into `/Schemas` |
-| 7 | Schema definitions | discovery | every attribute definition: types, flags, `mutability`, `returned`, `uniqueness`, `subAttributes`, `referenceTypes`, no nested complex attributes, no `subAttributes` on a non-complex attribute (§1.2) |
+| 7 | Schema definitions | discovery, users | every attribute definition: types, flags, `mutability`, `returned`, `uniqueness`, `subAttributes`, `referenceTypes`, no nested complex attributes, no `subAttributes` on a non-complex attribute (§1.2); a caseExact value keeps its submitted case |
 | 8 | JSON examples | none | Not covered: the examples are documentation. scim-go checks them itself in `pkg/scimtest`. |
 
 ## Levels

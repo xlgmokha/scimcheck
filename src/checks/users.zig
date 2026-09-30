@@ -52,6 +52,7 @@ pub fn run(s: *Suite) void {
     primary(s);
     unassigned(s);
     everyAttribute(s);
+    caseExactValue(s);
 
     if (s.send(.GET, path, .{})) |got| {
         if (s.expectStatus(.must, "RFC7644 §3.4.1", got, .ok, "GET /Users/{id} returns 200")) {
@@ -242,6 +243,18 @@ fn primary(s: *Suite) void {
     }
     if (!s.expectStatus(.must, ref, res, .created, "POST with two primary values returns 400 or 201")) return;
     _ = s.check(.must, ref, check.primaryCount(j.array(j.field(s.json(res), "phoneNumbers"))) <= 1, "at most one value is primary", res.body);
+}
+
+/// RFC 7643 §7: a caseExact attribute keeps the case it was submitted with.
+fn caseExactValue(s: *Suite) void {
+    const ref = "RFC7643 §7";
+    const mixed = "MiXeD-CaSe-ExternalId";
+    const res = s.send(.POST, s.users_endpoint, .{ .body = s.userJson(.{ .user_name = s.userName("caseexact"), .external_id = mixed }) }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (!s.expectStatus(.must, ref, res, .created, "POST with a mixed-case externalId returns 201")) return;
+    const id = j.string(j.field(s.json(res), "id")) orelse return;
+    const got = s.fetch(ref, s.fmt("{s}/{s}", .{ s.users_endpoint, id })) orelse return;
+    _ = s.check(.must, ref, eql(j.string(j.field(got, "externalId")), mixed), "  externalId keeps the submitted case", s.fmt("{f}", .{std.json.fmt(got, .{})}));
 }
 
 fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, created: Client.Response) void {
