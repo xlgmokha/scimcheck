@@ -135,6 +135,9 @@ pub const UserSpec = struct {
     given_name: []const u8 = "Barbara",
     family_name: []const u8 = "Jensen",
     email: ?[]const u8 = null,
+    /// A non-primary email listed before the primary one, so a server that
+    /// sorts by the first value instead of the primary value is caught.
+    other_email: ?[]const u8 = null,
     external_id: ?[]const u8 = null,
     active: bool = true,
     /// A JSON object for the enterprise extension, sent only when the
@@ -361,8 +364,9 @@ pub const Suite = struct {
         else
             s.fmt("\"{s}\"", .{urn.user});
         const enterprise = if (with_extension) s.fmt(",\"{s}\":{s}", .{ urn.enterprise_user, spec.enterprise.? }) else "";
+        const other = if (spec.other_email) |o| s.fmt("{{\"value\":{f},\"type\":\"other\"}},", .{std.json.fmt(o, .{})}) else "";
         return s.fmt(
-            \\{{"schemas":[{s}],{s}"userName":{f},"externalId":{f},"name":{{"givenName":{f},"familyName":{f}}},"displayName":{f},"emails":[{{"value":{f},"type":"work","primary":true}}],"active":{},"password":"t1meMa$heen!"{s}}}
+            \\{{"schemas":[{s}],{s}"userName":{f},"externalId":{f},"name":{{"givenName":{f},"familyName":{f}}},"displayName":{f},"emails":[{s}{{"value":{f},"type":"work","primary":true}}],"active":{},"password":"t1meMa$heen!"{s}}}
         , .{
             schemas,
             spec.extra,
@@ -371,6 +375,7 @@ pub const Suite = struct {
             std.json.fmt(spec.given_name, .{}),
             std.json.fmt(spec.family_name, .{}),
             std.json.fmt(spec.display_name, .{}),
+            other,
             std.json.fmt(email, .{}),
             spec.active,
             enterprise,
@@ -412,8 +417,9 @@ pub const Suite = struct {
     }
 
     /// Creates the three shared users once: alice, bob and carol. They sort
-    /// alice < bob < carol by userName, but bob < carol < alice by
-    /// name.givenName and by primary email. carol is inactive.
+    /// alice < bob < carol by userName and by their first (non-primary)
+    /// email, but bob < carol < alice by name.givenName and by primary email.
+    /// carol is inactive.
     pub fn requireFixtures(s: *Suite) ?[3]Fixture {
         if (s.fixtures) |f| return f;
         if (s.fixtures_failed) {
@@ -435,6 +441,7 @@ pub const Suite = struct {
                 .display_name = who,
                 .given_name = given,
                 .email = s.fmt("{s}.{s}@example.com", .{ letter, user_name }),
+                .other_email = s.fmt("{d}.{s}@example.com", .{ i + 1, user_name }),
                 .external_id = s.fmt("Ext-{s}", .{user_name}),
                 .active = active,
                 .enterprise = s.fmt("{{\"employeeNumber\":{f},\"department\":{f}}}", .{ std.json.fmt(employee_number, .{}), std.json.fmt(department, .{}) }),

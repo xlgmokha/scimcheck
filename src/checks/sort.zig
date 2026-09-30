@@ -1,6 +1,6 @@
 //! Sorting (RFC 7644 §3.4.2.3). The fixtures sort alice, bob, carol by
-//! userName but bob, carol, alice by name.givenName and by primary email,
-//! so each sortBy is distinguishable.
+//! userName and by their first email, but bob, carol, alice by
+//! name.givenName and by primary email, so each sortBy is distinguishable.
 const std = @import("std");
 
 const check = @import("../check.zig");
