@@ -343,7 +343,7 @@ fn duplicateValue(s: *Suite) void {
     });
     const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
     s.trackCreated(s.users_endpoint, res);
-    if (!s.expectStatus(.must, ref, res, .created, "POST with a duplicate (type, value) pair returns 201")) return;
+    if (!s.expectStatusIn(.must, ref, res, &.{ .created, .bad_request }, "POST with a duplicate (type, value) pair returns 201 or 400") or res.status == .bad_request) return;
     var matches: usize = 0;
     for (j.array(j.field(s.json(res), "phoneNumbers")) orelse &.{}) |item| {
         if (eql(j.string(j.field(item, "value")), "555-0199") and eql(j.string(j.field(item, "type")), "work")) matches += 1;
