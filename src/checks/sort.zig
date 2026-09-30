@@ -28,6 +28,8 @@ pub fn run(s: *Suite) void {
         .{ "sortBy=emails", .{ 1, 2, 0 }, "sortBy a multi-valued attribute uses the primary value", .must },
         .{ "sortBy=emails.value", .{ 1, 2, 0 }, "sortBy emails.value", .should },
         .{ "sortBy=meta.created", .{ 0, 1, 2 }, "sortBy meta.created orders by creation time", .should },
+        .{ "sortBy=nickName", .{ 2, 0, 1 }, "resources without a value sort last when ascending", .should },
+        .{ "sortBy=nickName&sortOrder=descending", .{ 1, 0, 2 }, "resources without a value sort first when descending", .should },
     };
     for (cases) |c| {
         const res = s.send(.GET, s.fmt("{s}&{s}", .{ base, c[0] }), .{}) orelse continue;

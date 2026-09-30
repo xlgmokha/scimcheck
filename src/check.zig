@@ -419,21 +419,22 @@ pub const Suite = struct {
     /// Creates the three shared users once: alice, bob and carol. They sort
     /// alice < bob < carol by userName and by their first (non-primary)
     /// email, but bob < carol < alice by name.givenName and by primary email.
-    /// carol is inactive.
+    /// carol is inactive, and bob is the only one without a nickName.
     pub fn requireFixtures(s: *Suite) ?[3]Fixture {
         if (s.fixtures) |f| return f;
         if (s.fixtures_failed) {
             s.skip("fixtures are unavailable");
             return null;
         }
-        const specs = [_]struct { []const u8, []const u8, []const u8, bool, []const u8 }{
-            .{ "alice", "Charlie", "c", true, "Eng" },
-            .{ "bob", "Alpha", "a", true, "Eng" },
-            .{ "carol", "Bravo", "b", false, "Sales" },
+        // bob has no nickName, to check where unassigned values sort.
+        const specs = [_]struct { []const u8, []const u8, []const u8, bool, []const u8, ?[]const u8 }{
+            .{ "alice", "Charlie", "c", true, "Eng", "Beta" },
+            .{ "bob", "Alpha", "a", true, "Eng", null },
+            .{ "carol", "Bravo", "b", false, "Sales", "Alpha" },
         };
         var result: [3]Fixture = undefined;
         for (specs, 0..) |spec, i| {
-            const who, const given, const letter, const active, const department = spec;
+            const who, const given, const letter, const active, const department, const nick = spec;
             const user_name = s.fmt("{s}-{s}", .{ s.fixturePrefix(), who });
             const employee_number = s.fmt("{s}-{d}", .{ s.run_id, i + 1 });
             var fixture = s.createUser(.{
@@ -444,6 +445,7 @@ pub const Suite = struct {
                 .other_email = s.fmt("{d}.{s}@example.com", .{ i + 1, user_name }),
                 .external_id = s.fmt("Ext-{s}", .{user_name}),
                 .active = active,
+                .extra = if (nick) |n| s.fmt("\"nickName\":{f},", .{std.json.fmt(n, .{})}) else "",
                 .enterprise = s.fmt("{{\"employeeNumber\":{f},\"department\":{f}}}", .{ std.json.fmt(employee_number, .{}), std.json.fmt(department, .{}) }),
             }) orelse {
                 s.fixtures_failed = true;
