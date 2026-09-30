@@ -102,8 +102,12 @@ fn patchMembers(s: *Suite, path: []const u8, f: [3]check.Fixture) void {
     s.expectPatch("RFC7644 §3.5.2.1", path, add, "PATCH add a member", null, null);
     if (s.fetch(ref, path)) |v| _ = s.check(.must, "RFC7644 §3.5.2.1", memberList(v).len == 3 and has(v, f[2].id), "  existing members are kept", null);
 
+    const before = s.fetch(ref, path);
     s.expectPatch("RFC7644 §3.5.2.1", path, add, "PATCH add an existing member", null, null);
-    if (s.fetch(ref, path)) |v| _ = s.check(.should, "RFC7644 §3.5.2.1", memberList(v).len == 3, "  the member is not duplicated", null);
+    if (s.fetch(ref, path)) |v| {
+        _ = s.check(.should, "RFC7644 §3.5.2.1", memberList(v).len == 3, "  the member is not duplicated", null);
+        _ = s.check(.must, "RFC7644 §3.5.2.1", eql(j.string(j.path(v, "meta.lastModified")), j.string(j.path(before, "meta.lastModified")) orelse ""), "  meta.lastModified is unchanged", null);
+    }
 
     const remove = s.fmt("{{\"op\":\"remove\",\"path\":{f}}}", .{std.json.fmt(s.fmt("members[value eq \"{s}\"]", .{f[0].id}), .{})});
     s.expectPatch("RFC7644 §3.5.2.2", path, remove, "PATCH remove a member by value filter", null, null);

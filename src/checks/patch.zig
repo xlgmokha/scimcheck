@@ -78,11 +78,14 @@ fn multiValued(s: *Suite, path: []const u8, work_email: []const u8) void {
         const emails = j.array(j.field(v, "emails"));
         _ = s.check(.must, "RFC7644 §3.5.2.1", j.findBy(emails, "type", "home") != null and j.findBy(emails, "value", work_email) != null, "  the value is appended and existing values are kept", null);
     }
+    const before = s.fetch(ref, path);
     s.expectPatch("RFC7644 §3.5.2.1", path,
         \\{"op":"add","path":"emails","value":[{"value":"carol@home.example.com","type":"home"}]}
     , "add a value that is already present", null, null);
     if (s.fetch(ref, path)) |v| {
         _ = s.check(.should, "RFC7644 §3.5.2.1", count(j.array(j.field(v, "emails")), "value", "carol@home.example.com") == 1, "  the value is not duplicated", null);
+        const modified = j.string(j.path(before, "meta.lastModified")) orelse "";
+        _ = s.check(.must, "RFC7644 §3.5.2.1", check.eql(j.string(j.path(v, "meta.lastModified")), modified), "  meta.lastModified is unchanged", s.fmt("was {s}, now {?s}", .{ modified, j.string(j.path(v, "meta.lastModified")) }));
     }
     s.expectPatch("RFC7644 §3.5.2.1", path,
         \\{"op":"add","path":"emails[type eq \"work\"].display","value":"Work"}
