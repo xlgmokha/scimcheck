@@ -53,6 +53,7 @@ pub fn run(s: *Suite) void {
     unassigned(s);
     everyAttribute(s);
     caseExactValue(s);
+    addressCountry(s);
 
     if (s.send(.GET, path, .{})) |got| {
         if (s.expectStatus(.must, "RFC7644 §3.4.1", got, .ok, "GET /Users/{id} returns 200")) {
@@ -268,6 +269,25 @@ fn caseExactValue(s: *Suite) void {
     const id = j.string(j.field(s.json(res), "id")) orelse return;
     const got = s.fetch(ref, s.fmt("{s}/{s}", .{ s.users_endpoint, id })) orelse return;
     _ = s.check(.must, ref, eql(j.string(j.field(got, "externalId")), mixed), "  externalId keeps the submitted case", s.fmt("{f}", .{std.json.fmt(got, .{})}));
+}
+
+/// RFC 7643 §4.1.2: an address's country value MUST be ISO 3166-1 alpha-2.
+fn addressCountry(s: *Suite) void {
+    const ref = "RFC7643 §4.1.2";
+    const body = s.userJson(.{
+        .user_name = s.userName("country"),
+        .extra = "\"addresses\":[{\"type\":\"work\",\"country\":\"United States\"}],",
+    });
+    const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (res.status == .bad_request) {
+        _ = s.check(.must, ref, true, "  a non-alpha-2 country is rejected", null);
+        return;
+    }
+    if (!s.expectStatus(.must, ref, res, .created, "  POST with a non-alpha-2 country returns 400 or 201")) return;
+    const addresses = j.array(j.field(s.json(res), "addresses"));
+    const country = if (addresses != null and addresses.?.len > 0) j.string(j.field(addresses.?[0], "country")) else null;
+    _ = s.check(.must, ref, country != null and country.?.len == 2, "  a non-alpha-2 country is normalized to two letters", country);
 }
 
 fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, created: Client.Response) void {
