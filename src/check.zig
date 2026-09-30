@@ -310,6 +310,14 @@ pub const Suite = struct {
             _ = s.check(.must, "RFC7644 §3.4.2", false, "  Resources is an array", res.body);
             return null;
         }
+        // RFC 7644 §3.4.2: Resources is REQUIRED when totalResults is non-zero,
+        // and startIndex and itemsPerPage when the results are paginated.
+        if (total.? > 0 and resources == null) {
+            _ = s.check(.must, "RFC7644 §3.4.2", false, "  Resources is present when totalResults is non-zero", res.body);
+        }
+        if (resourceCount(body.?) < total.?) {
+            _ = s.check(.must, "RFC7644 §3.4.2", j.integer(j.field(body, "startIndex")) != null and j.integer(j.field(body, "itemsPerPage")) != null, "  a partial page has startIndex and itemsPerPage", res.body);
+        }
         if (resourceCount(body.?) > 0) {
             if (j.integer(j.field(body, "itemsPerPage"))) |per_page| {
                 _ = s.check(.must, "RFC7644 §3.4.2", per_page == @as(i64, @intCast(resourceCount(body.?))), "  itemsPerPage equals the number of Resources", res.body);
