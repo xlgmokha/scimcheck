@@ -55,6 +55,7 @@ pub fn run(s: *Suite) void {
     caseExactValue(s);
     addressCountry(s);
     groupsReadOnly(s);
+    canonicalization(s);
 
     if (s.send(.GET, path, .{})) |got| {
         if (s.expectStatus(.must, "RFC7644 §3.4.1", got, .ok, "GET /Users/{id} returns 200")) {
@@ -304,6 +305,31 @@ fn groupsReadOnly(s: *Suite) void {
     if (!s.expectStatus(.must, ref, res, .created, "POST with a client-supplied groups value returns 201")) return;
     const groups = j.array(j.field(s.json(res), "groups"));
     _ = s.check(.must, ref, j.findBy(groups, "value", "scimcheck-fake-group") == null, "  a client-supplied groups value is ignored", res.body);
+}
+
+/// RFC 7643 §4.1.2: emails, phoneNumbers and ims SHOULD be canonicalized -
+/// canonicalizing and leaving the value as submitted are both allowed.
+const canonicalization_attrs = [_]struct { []const u8, []const u8 }{
+    .{ "emails", "[{\"value\":\"BJensen@EXAMPLE.COM\",\"type\":\"work\"}]" },
+    .{ "phoneNumbers", "[{\"value\":\"(555) 555-0100\",\"type\":\"work\"}]" },
+    .{ "ims", "[{\"value\":\" SomeAIMHandle \",\"type\":\"aim\"}]" },
+};
+
+fn canonicalization(s: *Suite) void {
+    const ref = "RFC7643 §4.1.2";
+    for (canonicalization_attrs) |entry| {
+        const name, const value = entry;
+        const body = s.userJson(.{
+            .user_name = s.userName(s.fmt("canon-{s}", .{name})),
+            .extra = s.fmt("\"{s}\":{s},", .{ name, value }),
+        });
+        const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse continue;
+        s.trackCreated(s.users_endpoint, res);
+        if (!s.expectStatus(.must, ref, res, .created, s.fmt("  {s}: POST with a non-canonical value returns 201", .{name}))) continue;
+        const items = j.array(j.field(s.json(res), name));
+        const stored = if (items != null and items.?.len > 0) j.string(j.field(items.?[0], "value")) else null;
+        _ = s.check(.should, ref, stored != null and stored.?.len > 0, s.fmt("  {s}: a non-canonical value is not dropped", .{name}), stored);
+    }
 }
 
 fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, created: Client.Response) void {
