@@ -19,7 +19,7 @@ pub fn run(s: *Suite) void {
     const user_name = s.userName("enterprise");
     const number = s.fmt("{s}-e", .{s.run_id});
     const enterprise = s.fmt(
-        \\{{"employeeNumber":{f},"department":"Research","costCenter":"4130","manager":{{"value":{f}}}}}
+        \\{{"employeeNumber":{f},"department":"Research","costCenter":"4130","manager":{{"value":{f},"displayName":"scimcheck fake manager"}}}}
     , .{ std.json.fmt(number, .{}), std.json.fmt(f[0].id, .{}) });
     const res = s.send(.POST, s.users_endpoint, .{ .body = s.userJson(.{ .user_name = user_name, .enterprise = enterprise }) }) orelse return;
     if (!s.expectStatus(.must, "RFC7644 §3.3", res, .created, "POST a User with the enterprise extension returns 201")) return;
@@ -32,6 +32,7 @@ pub fn run(s: *Suite) void {
     const stored = j.field(body, ext);
     _ = s.check(.must, ref, eql(j.string(j.field(stored, "employeeNumber")), number) and eql(j.string(j.field(stored, "department")), "Research"), "extension attributes are stored under the extension URN", res.body);
     _ = s.check(.should, "RFC7643 §4.3", eql(j.string(j.path(stored, "manager.value")), f[0].id), "manager.value references the manager's id", res.body);
+    _ = s.check(.must, "RFC7643 §4.3", !eql(j.string(j.path(stored, "manager.displayName")), "scimcheck fake manager"), "a client-supplied manager.displayName (readOnly) is ignored", res.body);
 
     if (s.fetch("RFC7644 §3.4.1", path)) |got| {
         _ = s.check(.must, ref, eql(j.string(j.path(j.field(got, ext), "costCenter")), "4130"), "GET returns extension attributes", null);
