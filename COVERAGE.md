@@ -27,7 +27,7 @@ or configuration a client cannot see.
 | 3.5.2.1 | add | patch, groups | with and without a path, single- and multi-valued targets, sub-attributes, value filters, duplicates |
 | 3.5.2.2 | remove | patch, groups, extensions | attributes, sub-attributes, value filters, filters that match nothing, whole multi-valued attributes, missing path |
 | 3.5.2.3 | replace | patch, groups, extensions | with and without a path, complex values, value filters, unmatched filters, adding absent attributes |
-| 3.6 | Deleting | users, groups, etag | 204, then 404; omitted from queries; groups do not delete members; reference cleanup as INFO |
+| 3.6 | Deleting | users, groups, etag | 204, then 404; omitted from queries; a deleted userName can be reused; groups do not delete members; reference cleanup as INFO |
 | 3.7 | Bulk | bulk | **Partial.** bulkId references, `failOnErrors`, `maxOperations` → 413, 501 when unsupported. Circular bulkId references (§3.7.1) and `maxPayloadSize` are not exercised. |
 | 3.8 | Data formats | users, errors | JSON only; case-insensitive attribute names; malformed JSON → `invalidSyntax` |
 | 3.9 | Response parameters | attributes | GET, list, POST, PUT and PATCH; `returned: always` and `never` |

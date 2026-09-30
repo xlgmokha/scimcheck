@@ -81,6 +81,11 @@ pub fn run(s: *Suite) void {
     if (s.caps.filter) {
         s.expectCount("RFC7644 §3.6", .must, s.fmt("userName eq \"{s}\"", .{user_name}), 0, "a deleted User is omitted from queries");
     }
+    // RFC 7644 §3.6: a deleted resource is not considered in uniqueness checks.
+    if (s.send(.POST, s.users_endpoint, .{ .body = s.userJson(.{ .user_name = user_name }) })) |again| {
+        s.trackCreated(s.users_endpoint, again);
+        _ = s.expectStatus(.should, "RFC7644 §3.6", again, .created, "the userName of a deleted User can be reused");
+    }
 }
 
 fn uniqueness(s: *Suite, user_name: []const u8) void {
