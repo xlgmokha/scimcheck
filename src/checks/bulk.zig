@@ -44,6 +44,7 @@ pub fn run(s: *Suite) void {
     }
 
     if (user_location) |loc| modify(s, loc);
+    if (s.groups_endpoint) |endpoint| circular(s, endpoint);
 
     // failOnErrors=1 stops processing after the first error.
     const failing = s.fmt(
@@ -128,4 +129,43 @@ fn modify(s: *Suite, location: []const u8) void {
     if (s.send(.GET, path, .{})) |gone| {
         _ = s.expectStatus(.must, ref, gone, .not_found, "  the User deleted in bulk is gone");
     }
+}
+
+/// RFC 7644 §3.7.1: circular bulkId references MUST be resolved, or the
+/// service provider MAY give up and report 409 for them.
+fn circular(s: *Suite, endpoint: []const u8) void {
+    const ref = "RFC7644 §3.7.1";
+    const group = struct {
+        fn json(suite: *Suite, name: []const u8, member: []const u8) []const u8 {
+            return suite.fmt("{{\"schemas\":[\"{s}\"],\"displayName\":{f},\"members\":[{{\"value\":\"bulkId:{s}\",\"type\":\"Group\"}}]}}", .{ urn.group, std.json.fmt(suite.fmt("scimcheck-{s}-bulk-{s}", .{ suite.run_id, name }), .{}), member });
+        }
+    }.json;
+    const payload = s.fmt(
+        \\{{"schemas":["{s}"],"Operations":[{{"method":"POST","path":{f},"bulkId":"ga","data":{s}}},{{"method":"POST","path":{f},"bulkId":"gb","data":{s}}}]}}
+    , .{ urn.bulk_request, std.json.fmt(endpoint, .{}), group(s, "a", "gb"), std.json.fmt(endpoint, .{}), group(s, "b", "ga") });
+    const res = s.send(.POST, "/Bulk", .{ .body = payload }) orelse return;
+    if (!s.expectStatus(.must, ref, res, .ok, "POST /Bulk with circular bulkId references returns 200")) return;
+    const results = j.array(j.field(s.json(res), "Operations")) orelse &.{};
+    const a = j.findBy(results, "bulkId", "ga");
+    const b = j.findBy(results, "bulkId", "gb");
+    const conflict = eql(j.string(j.field(a, "status")), "409") or eql(j.string(j.field(b, "status")), "409");
+    var resolved = true;
+    for ([_]struct { ?std.json.Value, ?std.json.Value }{ .{ a, b }, .{ b, a } }) |pair| {
+        const result, const other = pair;
+        if (!eql(j.string(j.field(result, "status")), "201")) {
+            resolved = false;
+            continue;
+        }
+        const location = j.string(j.field(result, "location")) orelse "";
+        if (location.len > 0) s.created.append(s.arena, location) catch {};
+        const got = s.fetch(ref, location) orelse {
+            resolved = false;
+            continue;
+        };
+        const members = j.array(j.field(got, "members")) orelse &.{};
+        const value = if (members.len > 0) j.string(j.field(members[0], "value")) orelse "" else "";
+        const other_location = j.string(j.field(other, "location")) orelse "";
+        resolved = resolved and value.len > 0 and std.mem.endsWith(u8, other_location, value);
+    }
+    _ = s.check(.must, ref, resolved or conflict, "  each Group references the other's new id, or the conflict is reported as 409", res.body);
 }
