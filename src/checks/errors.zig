@@ -40,7 +40,7 @@ pub fn run(s: *Suite) void {
     }
     const no_schemas = s.fmt("{{\"userName\":{f}}}", .{std.json.fmt(s.userName("noschemas"), .{})});
     if (s.send(.POST, s.users_endpoint, .{ .body = no_schemas })) |res| {
-        s.expectError(.should, "RFC7643 §3", res, .bad_request, null, "POST a resource without schemas returns 400");
+        s.expectError(.must, "RFC7643 §3", res, .bad_request, null, "POST a resource without the required schemas returns 400");
         s.trackCreated(s.users_endpoint, res);
     }
     const unknown_schema = s.fmt("{{\"schemas\":[\"urn:scimcheck:unknown\"],\"userName\":{f}}}", .{std.json.fmt(s.userName("badschema"), .{})});
