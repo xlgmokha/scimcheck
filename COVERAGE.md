@@ -39,7 +39,7 @@ or configuration a client cannot see.
 | 4 | Discovery endpoints | discovery, auth | shape of all three endpoints, single-item and unknown lookups, 403 for filters, unauthenticated access as INFO |
 | 5 | Internationalized strings | none | Not covered: PRECIS comparison rules are not exercised. |
 | 6 | Multi-tenancy | none | Not testable from one tenant. |
-| 7 | Security | none | Not covered: TLS policy, token handling and logging are deployment concerns. |
+| 7 | Security | auth | **Partial.** The service provider is reached over TLS (§7.2; skipped for loopback addresses). TLS versions, token handling and logging are not visible to a client. |
 
 ## RFC 7643: schema
 
