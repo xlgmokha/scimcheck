@@ -38,11 +38,7 @@ pub fn run(s: *Suite) void {
     if (page(s, base, "&count=-1", "count=-1")) |body| {
         _ = s.check(.must, ref, check.resourceCount(body) == 0, "  a negative count is interpreted as 0", null);
     }
-    if (s.caps.max_results) |max| {
-        if (page(s, base, s.fmt("&count={d}", .{max + 1}), "count above filter.maxResults")) |body| {
-            _ = s.check(.must, "RFC7643 §5", (j.integer(j.field(body, "itemsPerPage")) orelse 0) <= max, "  no more than maxResults are returned", null);
-        }
-    }
+    if (s.caps.max_results) |max| maxResults(s, max);
 
     // Walking the pages one at a time visits every fixture exactly once.
     // Without sorting the walk relies on the server's natural order being stable.
@@ -57,6 +53,39 @@ pub fn run(s: *Suite) void {
         };
     }
     _ = s.check(.must, ref, seen.count() == 3, "paging with count=1 visits every result exactly once", null);
+}
+
+/// Creating more Users than this to exceed filter.maxResults is too costly;
+/// the check is skipped instead.
+const max_fillers = 100;
+
+/// RFC 7643 §5: a page never holds more than filter.maxResults resources.
+/// The limit can only be exceeded with more Users than it, so throwaway
+/// Users are created when the server has too few.
+fn maxResults(s: *Suite, max: i64) void {
+    if (max < 1) return;
+    const target = s.fmt("{s}?attributes=id&count={d}", .{ s.users_endpoint, max + 1 });
+    var body = page(s, target, "", "count above filter.maxResults") orelse return;
+    const total = j.integer(j.field(body, "totalResults")) orelse return;
+    var fillers: std.ArrayList([]const u8) = .empty;
+    defer for (fillers.items) |path| {
+        if (s.client.send(s.arena, .DELETE, path, .{})) |res| {
+            if (res.status == .no_content) s.untrack(path);
+        } else |_| {}
+    };
+    if (total <= max) {
+        const missing = max + 1 - total;
+        if (missing > max_fillers) return s.skip("fewer than filter.maxResults + 1 Users, so the limit cannot be exceeded");
+        var i: i64 = 0;
+        while (i < missing) : (i += 1) {
+            // Not "-f...": that would match the fixture prefix.
+            const filler = s.createUser(.{ .user_name = s.userName(s.fmt("page-{d}", .{i})) }) orelse return;
+            fillers.append(s.arena, filler.path) catch {};
+        }
+        body = page(s, target, "", "count above filter.maxResults with more Users than the limit") orelse return;
+    }
+    const per_page = j.integer(j.field(body, "itemsPerPage")) orelse @as(i64, @intCast(check.resourceCount(body)));
+    _ = s.check(.must, "RFC7643 §5", per_page <= max and check.resourceCount(body) <= max, "  no more than maxResults are returned", s.fmt("maxResults is {d}, got {d} resources", .{ max, check.resourceCount(body) }));
 }
 
 fn page(s: *Suite, base: []const u8, query: []const u8, what: []const u8) ?std.json.Value {

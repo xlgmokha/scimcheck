@@ -19,7 +19,7 @@ or configuration a client cannot see.
 | 3.4.2.1 | Query endpoints | search | resource-type queries; root queries reported as INFO (MAY) |
 | 3.4.2.2 | Filtering | filter, groups, extensions | all 10 operators, `and`/`or`/`not`, precedence, grouping, value paths, sub-attribute and URN paths, booleans, dateTimes, `null` as unassigned, `caseExact`, case-insensitive names and operators, `invalidFilter` |
 | 3.4.2.3 | Sorting | sort, extensions, search | ascending default, `sortOrder`, sub-attributes, multi-valued attributes by their primary (not first) value, resources without a value last when ascending and first when descending, URN names, extension attributes, with paging |
-| 3.4.2.4 | Pagination | pagination, search | `startIndex`/`count` defaults and bounds, `itemsPerPage`, `totalResults`, `maxResults`, a full page walk |
+| 3.4.2.4 | Pagination | pagination, search | `startIndex`/`count` defaults and bounds, `itemsPerPage`, `totalResults`, `maxResults` (creating throwaway Users to exceed it when needed), a full page walk |
 | 3.4.2.5 | Attributes on queries | attributes | `attributes` / `excludedAttributes` on lists |
 | 3.4.3 | Querying with POST | search | filter, attributes, excludedAttributes, paging and sorting in a SearchRequest; root `/.search` as INFO |
 | 3.5.1 | Replacing with PUT | users, groups, extensions, etag | replacement, readOnly `id` ignored, `meta` handling, omitted attributes cleared, required attributes enforced |
