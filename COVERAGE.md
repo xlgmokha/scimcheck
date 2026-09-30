@@ -68,8 +68,12 @@ Each check uses the level of the RFC 2119 keyword it is based on:
 - `WARN`: SHOULD or RECOMMENDED.
 - `INFO`: MAY or OPTIONAL.
 
-Where the RFC allows more than one outcome (for example 400 or silently
-ignoring a readOnly `id`), the check accepts every allowed outcome.
+Where the RFC allows more than one outcome (for example a 200 with the
+resource or a 204 after PATCH), the check accepts every allowed outcome.
+A requirement the RFC places on a request (for example that `schemas` is
+REQUIRED, or that a PATCH operation MUST be compatible with the attribute's
+mutability) is checked by sending a request that breaks it: accepting it is
+graded at the level of the broken requirement.
 
 [7643]: https://datatracker.ietf.org/doc/html/rfc7643
 [7644]: https://datatracker.ietf.org/doc/html/rfc7644
