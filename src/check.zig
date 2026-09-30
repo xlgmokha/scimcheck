@@ -527,8 +527,12 @@ pub fn isEntityTag(v: ?[]const u8) bool {
     return s.len >= 2 and s[0] == '"' and s[s.len - 1] == '"' and std.mem.findScalar(u8, s[1 .. s.len - 1], '"') == null;
 }
 
+/// Shortens `s` to at most 300 bytes without splitting a UTF-8 sequence.
 pub fn truncate(s: []const u8) []const u8 {
-    return if (s.len > 300) s[0..300] else s;
+    if (s.len <= 300) return s;
+    var end: usize = 300;
+    while (end > 0 and s[end] & 0xC0 == 0x80) end -= 1;
+    return s[0..end];
 }
 
 test isDateTime {
@@ -544,6 +548,16 @@ test isEntityTag {
     try std.testing.expect(!isEntityTag("abc"));
     try std.testing.expect(!isEntityTag("W/abc"));
     try std.testing.expect(!isEntityTag("\"a\"b\""));
+}
+
+test truncate {
+    try std.testing.expectEqualStrings("short", truncate("short"));
+    const ascii = "a" ** 400;
+    try std.testing.expectEqual(@as(usize, 300), truncate(ascii).len);
+    // "é" is two bytes; one starting at byte 299 must not be cut in half.
+    const accented = "a" ** 299 ++ "é" ++ "a" ** 10;
+    try std.testing.expectEqual(@as(usize, 299), truncate(accented).len);
+    try std.testing.expect(std.unicode.utf8ValidateSlice(truncate(accented)));
 }
 
 test "every section compiles" {
