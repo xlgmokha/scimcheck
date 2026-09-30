@@ -44,12 +44,9 @@ fn serviceProviderConfig(s: *Suite) void {
         .max_results = j.integer(j.path(body, "filter.maxResults")),
         .bulk_max_operations = j.integer(j.path(body, "bulk.maxOperations")),
     };
-    if (s.caps.filter) {
-        _ = s.check(.must, ref, s.caps.max_results != null, "filter.maxResults is an integer", null);
-    }
-    if (s.caps.bulk) {
-        _ = s.check(.must, ref, s.caps.bulk_max_operations != null and j.integer(j.path(body, "bulk.maxPayloadSize")) != null, "bulk.maxOperations and bulk.maxPayloadSize are integers", null);
-    }
+    // RFC 7643 §5: these are REQUIRED whether or not the feature is supported.
+    _ = s.check(.must, ref, s.caps.max_results != null, "filter.maxResults is an integer", null);
+    _ = s.check(.must, ref, s.caps.bulk_max_operations != null and j.integer(j.path(body, "bulk.maxPayloadSize")) != null, "bulk.maxOperations and bulk.maxPayloadSize are integers", null);
     const schemes = j.array(j.field(body, "authenticationSchemes"));
     _ = s.check(.must, ref, schemes != null, "authenticationSchemes is an array", null);
     var complete = true;
