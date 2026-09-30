@@ -1,5 +1,6 @@
-//! Bulk operations (RFC 7644 §3.7): bulkId references, failOnErrors and
-//! maxOperations, or 501 when bulk is unsupported.
+//! Bulk operations (RFC 7644 §3.7): bulkId references, required fields,
+//! failOnErrors, maxOperations and maxPayloadSize, or 501 when bulk is
+//! unsupported.
 const std = @import("std");
 
 const check = @import("../check.zig");
@@ -45,6 +46,7 @@ pub fn run(s: *Suite) void {
 
     if (user_location) |loc| modify(s, loc);
     if (s.groups_endpoint) |endpoint| circular(s, endpoint);
+    missingBulkId(s);
 
     // failOnErrors=1 stops processing after the first error.
     const failing = s.fmt(
@@ -129,6 +131,22 @@ fn modify(s: *Suite, location: []const u8) void {
     if (s.send(.GET, path, .{})) |gone| {
         _ = s.expectStatus(.must, ref, gone, .not_found, "  the User deleted in bulk is gone");
     }
+}
+
+/// RFC 7644 §3.7: bulkId is REQUIRED when "method" is "POST". Accept either
+/// the whole request rejected, or the operation reporting its own error.
+fn missingBulkId(s: *Suite) void {
+    const ref = "RFC7644 §3.7";
+    const payload = s.fmt(
+        \\{{"schemas":["{s}"],"Operations":[{{"method":"POST","path":{f},"data":{s}}}]}}
+    , .{ urn.bulk_request, std.json.fmt(s.users_endpoint, .{}), s.userJson(.{ .user_name = s.userName("bulk-nobulkid") }) });
+    const res = s.send(.POST, "/Bulk", .{ .body = payload }) orelse return;
+    if (!s.expectStatusIn(.must, ref, res, &.{ .ok, .bad_request }, "  a POST operation missing bulkId is rejected, whole request or per-operation")) return;
+    if (res.status == .bad_request) return;
+    const results = j.array(j.field(s.json(res), "Operations")) orelse &.{};
+    const op = if (results.len > 0) results[0] else null;
+    if (j.string(j.field(op, "location"))) |loc| s.created.append(s.arena, loc) catch {};
+    _ = s.check(.must, ref, !eql(j.string(j.field(op, "status")), "201"), "  the operation missing bulkId reports an error rather than succeeding", res.body);
 }
 
 /// RFC 7644 §3.7.1: circular bulkId references MUST be resolved, or the

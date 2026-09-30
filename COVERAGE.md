@@ -28,7 +28,7 @@ or configuration a client cannot see.
 | 3.5.2.2 | remove | patch, groups, extensions | attributes, sub-attributes (also through value filters), value filters, filters that match nothing, whole multi-valued attributes, missing path |
 | 3.5.2.3 | replace | patch, groups, extensions | with and without a path, complex values, value filters, unmatched filters, adding absent attributes |
 | 3.6 | Deleting | users, groups, etag | 204, then 404; omitted from queries; a deleted userName can be reused; groups do not delete members; reference cleanup as INFO |
-| 3.7 | Bulk | bulk | **Partial.** POST, PUT, PATCH and DELETE operations with their `method`, `location` and `status`; bulkId references; `failOnErrors` and the error `response` of a failed operation; `maxOperations` and `maxPayloadSize` → 413; 501 when unsupported; circular bulkId references resolved or reported as 409. |
+| 3.7 | Bulk | bulk | **Partial.** POST, PUT, PATCH and DELETE operations with their `method`, `location` and `status`; bulkId references; a POST operation missing `bulkId` is rejected; `failOnErrors` and the error `response` of a failed operation; `maxOperations` and `maxPayloadSize` → 413; 501 when unsupported; circular bulkId references resolved or reported as 409. |
 | 3.8 | Data formats | users, errors | JSON only; case-insensitive attribute names; malformed JSON → `invalidSyntax` |
 | 3.9 | Response parameters | attributes | GET, list, POST, PUT and PATCH; `returned: always` and `never` |
 | 3.10 | Attribute notation | attributes, filter, sort, extensions | URN-qualified core and extension attributes in all three |
