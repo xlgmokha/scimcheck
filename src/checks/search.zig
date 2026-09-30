@@ -52,7 +52,7 @@ pub fn run(s: *Suite) void {
             }
         }
         if (s.send(.POST, search, .{ .body = "{\"filter\":\"userName pr\"}" })) |res| {
-            _ = s.expectStatus(.should, ref, res, .bad_request, "a SearchRequest without schemas returns 400");
+            _ = s.expectStatus(.must, ref, res, .bad_request, "a SearchRequest without schemas returns 400");
         }
         if (s.send(.POST, search, .{ .body = request(s, "\"filter\":\"userName eq\"") })) |res| {
             s.expectError(.must, ref, res, .bad_request, "invalidFilter", "a SearchRequest with a malformed filter returns 400 invalidFilter");
