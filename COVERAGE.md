@@ -25,7 +25,7 @@ or configuration a client cannot see.
 | 3.5.1 | Replacing with PUT | users, groups, extensions, etag | replacement, readOnly `id` ignored, `meta` handling, omitted attributes cleared, required attributes enforced |
 | 3.5.2 | Modifying with PATCH | patch, groups, extensions, etag | atomicity, ordering, 200 vs 204, errors (`noTarget`, `invalidPath`, `mutability`, `invalidSyntax`), primary handling |
 | 3.5.2.1 | add | patch, groups | with and without a path, single- and multi-valued targets, sub-attributes, value filters, duplicates |
-| 3.5.2.2 | remove | patch, groups, extensions | attributes, sub-attributes, value filters, whole multi-valued attributes, missing path |
+| 3.5.2.2 | remove | patch, groups, extensions | attributes, sub-attributes, value filters, filters that match nothing, whole multi-valued attributes, missing path |
 | 3.5.2.3 | replace | patch, groups, extensions | with and without a path, complex values, value filters, unmatched filters, adding absent attributes |
 | 3.6 | Deleting | users, groups, etag | 204, then 404; omitted from queries; groups do not delete members; reference cleanup as INFO |
 | 3.7 | Bulk | bulk | **Partial.** bulkId references, `failOnErrors`, `maxOperations` → 413, 501 when unsupported. Circular bulkId references (§3.7.1) and `maxPayloadSize` are not exercised. |
