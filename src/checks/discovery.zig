@@ -54,6 +54,13 @@ fn serviceProviderConfig(s: *Suite) void {
         complete = complete and j.string(j.field(scheme, "type")) != null and j.string(j.field(scheme, "name")) != null and j.string(j.field(scheme, "description")) != null;
     }
     _ = s.check(.must, ref, complete, "each authentication scheme has type, name and description", null);
+    const scheme_types = [_][]const u8{ "oauth", "oauth2", "oauthbearertoken", "httpbasic", "httpdigest" };
+    var unknown_scheme: ?[]const u8 = null;
+    for (schemes orelse &.{}) |scheme| {
+        const t = j.string(j.field(scheme, "type")) orelse continue;
+        if (!oneOf(&scheme_types, t)) unknown_scheme = unknown_scheme orelse t;
+    }
+    _ = s.check(.should, ref, unknown_scheme == null, "each authentication scheme type is one the RFC defines", unknown_scheme);
     if (res.content_location) |loc| {
         _ = s.check(.must, "RFC7643 §3.1", eql(j.string(j.path(body, "meta.location")), loc), "meta.location equals the Content-Location header", null);
     }
