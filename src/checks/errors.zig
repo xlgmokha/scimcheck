@@ -50,12 +50,12 @@ pub fn run(s: *Suite) void {
     }
     const wrong_type = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"active\":\"yes\"}}", .{ urn.user, std.json.fmt(s.userName("wrongtype"), .{}) });
     if (s.send(.POST, s.users_endpoint, .{ .body = wrong_type })) |res| {
-        s.expectError(.should, "RFC7643 §2.3", res, .bad_request, null, "POST a string where a boolean is defined returns 400");
+        s.expectError(.must, "RFC7643 §2.3", res, .bad_request, null, "POST a string where a boolean is defined returns 400");
         s.trackCreated(s.users_endpoint, res);
     }
     const bad_binary = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"x509Certificates\":[{{\"value\":\"!!!not base64\"}}]}}", .{ urn.user, std.json.fmt(s.userName("badbinary"), .{}) });
     if (s.send(.POST, s.users_endpoint, .{ .body = bad_binary })) |res| {
-        s.expectError(.should, "RFC7643 §2.3.6", res, .bad_request, null, "POST a binary value that is not base64 returns 400");
+        s.expectError(.must, "RFC7643 §2.3.6", res, .bad_request, null, "POST a binary value that is not base64 returns 400");
         s.trackCreated(s.users_endpoint, res);
     }
 
