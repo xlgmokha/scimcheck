@@ -417,13 +417,14 @@ pub const Suite = struct {
         };
     }
 
-    /// A unique userName for a throwaway user.
+    /// A unique userName for a throwaway user. `label` must not start with
+    /// "fixture-", which would put the user among the shared fixtures.
     pub fn userName(s: *Suite, label: []const u8) []const u8 {
         return s.fmt("scimcheck-{s}-{s}", .{ s.run_id, label });
     }
 
     pub fn fixturePrefix(s: *Suite) []const u8 {
-        return s.fmt("scimcheck-{s}-f", .{s.run_id});
+        return s.fmt("scimcheck-{s}-fixture-", .{s.run_id});
     }
 
     /// Creates the three shared users once: alice, bob and carol. They sort
@@ -445,7 +446,7 @@ pub const Suite = struct {
         var result: [3]Fixture = undefined;
         for (specs, 0..) |spec, i| {
             const who, const given, const letter, const active, const department, const nick = spec;
-            const user_name = s.fmt("{s}-{s}", .{ s.fixturePrefix(), who });
+            const user_name = s.fmt("{s}{s}", .{ s.fixturePrefix(), who });
             const employee_number = s.fmt("{s}-{d}", .{ s.run_id, i + 1 });
             var fixture = s.createUser(.{
                 .user_name = user_name,

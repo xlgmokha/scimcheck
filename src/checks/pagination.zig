@@ -79,7 +79,6 @@ fn maxResults(s: *Suite, max: i64) void {
         if (missing > max_fillers) return s.skip("fewer than filter.maxResults + 1 Users, so the limit cannot be exceeded");
         var i: i64 = 0;
         while (i < missing) : (i += 1) {
-            // Not "-f...": that would match the fixture prefix.
             const filler = s.createUser(.{ .user_name = s.userName(s.fmt("page-{d}", .{i})) }) orelse return;
             fillers.append(s.arena, filler.path) catch {};
         }
