@@ -38,6 +38,7 @@ pub fn run(s: *Suite) void {
     _ = s.check(.must, "RFC7643 §3.1", eql(j.string(j.path(body, "meta.resourceType")), "User"), "meta.resourceType is User", null);
     _ = s.check(.must, "RFC7643 §2.3.5", check.isDateTime(j.string(j.path(body, "meta.created"))), "meta.created is a dateTime", null);
     _ = s.check(.must, "RFC7643 §2.3.5", check.isDateTime(j.string(j.path(body, "meta.lastModified"))), "meta.lastModified is a dateTime", null);
+    _ = s.check(.must, "RFC7643 §3.1", eql(j.string(j.path(body, "meta.lastModified")), j.string(j.path(body, "meta.created")) orelse ""), "an unmodified User has meta.lastModified equal to meta.created", null);
     _ = s.check(.must, "RFC7643 §4.1.1", j.field(body, "password") == null, "password is never returned", null);
     _ = s.check(.must, "RFC7643 §2.3.2", j.boolean(j.field(body, "active")) == true, "active is returned as a JSON boolean", null);
     if (s.caps.etag) {
