@@ -50,6 +50,7 @@ pub fn run(s: *Suite) void {
     readOnlyInput(s);
     requestFormat(s);
     primary(s);
+    unassigned(s);
 
     if (s.send(.GET, path, .{})) |got| {
         if (s.expectStatus(.must, "RFC7644 §3.4.1", got, .ok, "GET /Users/{id} returns 200")) {
@@ -138,6 +139,24 @@ fn requestFormat(s: *Suite) void {
     if (s.send(.POST, s.users_endpoint, .{ .body = plain, .content_type = "application/json" })) |res| {
         s.trackCreated(s.users_endpoint, res);
         _ = s.expectStatus(.should, "RFC7644 §8.1", res, .created, "requests with Content-Type application/json are accepted");
+    }
+}
+
+/// RFC 7643 §2.5: assigning null, or an empty array to a multi-valued
+/// attribute, makes the attribute unassigned.
+fn unassigned(s: *Suite) void {
+    const ref = "RFC7643 §2.5";
+    const user_name = s.userName("unassigned");
+    const body = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"nickName\":null,\"emails\":[]}}", .{ urn.user, std.json.fmt(user_name, .{}) });
+    const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (!s.expectStatus(.must, ref, res, .created, "POST with a null value and an empty array returns 201")) return;
+    const v = s.json(res);
+    const nick = j.field(v, "nickName");
+    _ = s.check(.must, ref, nick == null or nick.? == .null, "  a null value leaves the attribute unassigned", res.body);
+    _ = s.check(.must, ref, check.lenOf(j.array(j.field(v, "emails"))) == 0, "  an empty array leaves the attribute unassigned", res.body);
+    if (s.caps.filter) {
+        s.expectCount(ref, .must, s.fmt("userName eq \"{s}\" and (nickName pr or emails pr)", .{user_name}), 0, "  unassigned attributes do not match pr");
     }
 }
 
