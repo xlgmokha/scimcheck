@@ -46,7 +46,7 @@ pub fn run(s: *Suite) void {
     }
     if (s.fetch("RFC7643 §4.1.2", f[0].path)) |user| {
         const groups = j.array(j.field(user, "groups"));
-        _ = s.check(.should, "RFC7643 §4.1.2", j.findBy(groups, "value", id) != null, "User.groups reflects Group membership", null);
+        _ = s.check(.must, "RFC7643 §4.1.2", j.findBy(groups, "value", id) != null, "User.groups reflects Group membership", null);
     }
 
     nested(s, endpoint, id);

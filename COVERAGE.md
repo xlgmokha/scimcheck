@@ -55,7 +55,7 @@ or configuration a client cannot see.
 | 3.1 | Common attributes | users, filter | `id` assigned by the server and caseExact; `externalId` caseExact; `meta.resourceType/created/lastModified/location/version`; `Content-Location` |
 | 3.3 | Extensions | extensions | storage, retrieval, filtering, sorting, projection, PATCH, removal |
 | 4.1 | User | users, patch, filter | `userName`, `name`, `displayName`, `nickName`, `title`, `profileUrl`, `emails`, `phoneNumbers`, `active`, `password`, `groups`; every other §4.1 attribute the User schema publishes as writable is stored and returned |
-| 4.2 | Group | groups, discovery | `displayName` required; members' `value`, `type` and `$ref`; membership changes; nested Groups as INFO |
+| 4.2 | Group | groups, discovery | `displayName` required; members' `value`, `type` and `$ref`; membership changes; `User.groups` reflects membership (§4.1.2); nested Groups as INFO |
 | 4.3 | Enterprise User | extensions | `employeeNumber`, `department`, `costCenter`, `organization`, `division`, `manager.value`, `manager.$ref`, readOnly `manager.displayName` |
 | 5 | ServiceProviderConfig | discovery | every feature flag, `maxResults`, bulk limits, authentication schemes |
 | 6 | ResourceType | discovery | required attributes, `endpoint` relative to the base URL, `schemaExtensions`, and references into `/Schemas` |
