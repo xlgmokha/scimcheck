@@ -17,6 +17,7 @@ pub fn run(s: *Suite) void {
     crossReference(s, types, schemas);
     individualEndpoints(s, types, schemas);
     queryParamsIgnored(s, types, schemas);
+    unknownQueryParamIgnored(s);
 
     if (s.send(.GET, "/ResourceTypes?filter=name%20eq%20%22User%22", .{})) |res| {
         s.expectError(.should, "RFC7644 §4", res, .forbidden, null, "filtering /ResourceTypes returns 403");
@@ -176,6 +177,14 @@ fn attributeProblem(s: *Suite, attributes: []const Value, parent: []const u8) ?[
         }
     }
     return null;
+}
+
+/// RFC 7644 §3.4.2: unrecognized query parameters SHOULD be ignored rather
+/// than rejected.
+fn unknownQueryParamIgnored(s: *Suite) void {
+    if (s.send(.GET, s.fmt("{s}?scimcheckUnknownParam=1", .{s.users_endpoint}), .{})) |res| {
+        _ = s.expectStatus(.should, "RFC7644 §3.4.2", res, .ok, "an unrecognized query parameter is ignored rather than rejected");
+    }
 }
 
 fn oneOf(set: []const []const u8, v: []const u8) bool {
