@@ -210,7 +210,10 @@ fn rejected(res: Client.Response, op: ?std.json.Value) bool {
 fn bulkIds(s: *Suite) void {
     const ref = "RFC7644 §3.7";
     if (post(s, createOp(s, null, s.userName("bulk-no-id")))) |o| {
-        _ = s.check(.must, ref, rejected(o.res, if (o.ops.len > 0) o.ops[0] else null), "a POST operation without a bulkId is rejected", o.res.body);
+        // Only a client error fits a missing attribute; a 401 or 5xx does not.
+        const status = j.string(j.field(if (o.ops.len > 0) o.ops[0] else null, "status")) orelse "";
+        const client_error = o.res.status == .bad_request or (o.res.status == .ok and status.len > 0 and status[0] == '4');
+        _ = s.check(.must, ref, client_error, "a POST operation without a bulkId is rejected", o.res.body);
     }
     const dup = s.fmt("{s},{s}", .{ createOp(s, "dup", s.userName("bulk-dup-a")), createOp(s, "dup", s.userName("bulk-dup-b")) });
     if (post(s, dup)) |o| {
@@ -230,7 +233,11 @@ fn failedDelete(s: *Suite) void {
     const result = if (o.ops.len > 0) o.ops[0] else null;
     _ = s.check(.must, ref, eql(j.string(j.field(result, "status")), "404"), "  the operation reports status \"404\"", o.res.body);
     _ = s.check(.must, ref, j.string(j.field(result, "location")) != null, "  a failed DELETE still reports its location", o.res.body);
-    _ = s.check(.must, ref, j.hasSchema(j.field(result, "response"), urn.@"error"), "  the operation includes its error response", o.res.body);
+    // A non-2xx result MUST include the response body (RFC 7644 §3.7.3).
+    const status = j.string(j.field(result, "status")) orelse "";
+    if (status.len > 0 and status[0] != '2') {
+        _ = s.check(.must, ref, j.hasSchema(j.field(result, "response"), urn.@"error"), "  the operation includes its error response", o.res.body);
+    }
 }
 
 /// RFC 7644 §3.7: an operation "version" is used with entity-tags. A
@@ -266,6 +273,23 @@ fn versions(s: *Suite) void {
 /// the body". Servers word this freely, so accept the number or its name.
 fn namesLimit(s: *Suite, res: Client.Response, max: i64, name: []const u8) void {
     if (res.status != .payload_too_large) return;
-    const named = std.mem.find(u8, res.body, name) != null or std.mem.find(u8, res.body, s.fmt("{d}", .{max})) != null;
-    _ = s.check(.should, "RFC7644 §3.7.4", named, s.fmt("  the 413 response names the {s} limit", .{name}), res.body);
+    const what = s.fmt("  the 413 response names the {s} limit", .{name});
+    // Search only `detail`: the rest of the body holds "413" and the Error URN.
+    const detail = j.string(j.field(s.json(res), "detail")) orelse {
+        _ = s.check(.should, "RFC7644 §3.7.4", false, what, "the error has no detail");
+        return;
+    };
+    const named = std.mem.find(u8, detail, name) != null or containsNumber(detail, s.fmt("{d}", .{max}));
+    _ = s.check(.should, "RFC7644 §3.7.4", named, what, detail);
+}
+
+/// True when `text` holds `number` as a whole number, not inside a longer one.
+fn containsNumber(text: []const u8, number: []const u8) bool {
+    var from: usize = 0;
+    while (std.mem.findPos(u8, text, from, number)) |at| : (from = at + 1) {
+        const before = at == 0 or !std.ascii.isDigit(text[at - 1]);
+        const end = at + number.len;
+        if (before and (end == text.len or !std.ascii.isDigit(text[end]))) return true;
+    }
+    return false;
 }
