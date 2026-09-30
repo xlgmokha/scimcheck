@@ -31,7 +31,7 @@ fn serviceProviderConfig(s: *Suite) void {
     if (!s.expectStatus(.must, "RFC7644 §4", res, .ok, "GET /ServiceProviderConfig returns 200")) return;
     s.expectMediaType(res);
     const body = s.json(res);
-    _ = s.check(.must, ref, j.hasSchema(body, urn.service_provider_config), "ServiceProviderConfig lists its schema URN", null);
+    _ = s.check(.must, "RFC7644 §4", j.hasSchema(body, urn.service_provider_config), "ServiceProviderConfig lists its schema URN", null);
     inline for (.{ "patch", "bulk", "filter", "changePassword", "sort", "etag" }) |feature| {
         _ = s.check(.must, ref, j.boolean(j.path(body, feature ++ ".supported")) != null, feature ++ ".supported is a boolean", null);
     }
