@@ -1,6 +1,6 @@
 //! Bulk operations (RFC 7644 §3.7): bulkId references, required fields,
-//! failOnErrors, maxOperations and maxPayloadSize, or 501 when bulk is
-//! unsupported.
+//! continuing after a failure, failOnErrors, maxOperations and
+//! maxPayloadSize, or 501 when bulk is unsupported.
 const std = @import("std");
 
 const check = @import("../check.zig");
@@ -47,6 +47,7 @@ pub fn run(s: *Suite) void {
     if (user_location) |loc| modify(s, loc);
     if (s.groups_endpoint) |endpoint| circular(s, endpoint);
     missingBulkId(s);
+    continuesAfterFailure(s);
 
     // failOnErrors=1 stops processing after the first error.
     const failing = s.fmt(
@@ -147,6 +148,22 @@ fn missingBulkId(s: *Suite) void {
     const op = if (results.len > 0) results[0] else null;
     if (j.string(j.field(op, "location"))) |loc| s.created.append(s.arena, loc) catch {};
     _ = s.check(.must, ref, !eql(j.string(j.field(op, "status")), "201"), "  the operation missing bulkId reports an error rather than succeeding", res.body);
+}
+
+/// RFC 7644 §3.7: "The service provider MUST continue performing as many
+/// changes as possible and disregard partial failures" when failOnErrors is
+/// not set.
+fn continuesAfterFailure(s: *Suite) void {
+    const ref = "RFC7644 §3.7";
+    const payload = s.fmt(
+        \\{{"schemas":["{s}"],"Operations":[{{"method":"POST","path":{f},"bulkId":"bad2","data":{{"schemas":["{s}"]}}}},{{"method":"POST","path":{f},"bulkId":"after","data":{s}}}]}}
+    , .{ urn.bulk_request, std.json.fmt(s.users_endpoint, .{}), urn.user, std.json.fmt(s.users_endpoint, .{}), s.userJson(.{ .user_name = s.userName("bulk-after") }) });
+    const res = s.send(.POST, "/Bulk", .{ .body = payload }) orelse return;
+    if (!s.expectStatus(.must, ref, res, .ok, "POST /Bulk without failOnErrors returns 200")) return;
+    const results = j.array(j.field(s.json(res), "Operations")) orelse &.{};
+    const after = j.findBy(results, "bulkId", "after");
+    if (j.string(j.field(after, "location"))) |loc| s.created.append(s.arena, loc) catch {};
+    _ = s.check(.must, ref, eql(j.string(j.field(after, "status")), "201"), "  an operation after a failing one still succeeds without failOnErrors", res.body);
 }
 
 /// RFC 7644 §3.7.1: circular bulkId references MUST be resolved, or the
