@@ -27,6 +27,7 @@ pub fn run(s: *Suite) void {
         .{ s.fmt("userName sw \"{s}\" and userName ew \"-carol\"", .{p}), 1, "ew matches a suffix", .must },
         .{ s.fmt("userName sw \"{s}\" and emails pr", .{p}), 3, "pr matches present attributes", .must },
         .{ s.fmt("userName sw \"{s}\" and title pr", .{p}), 0, "pr does not match absent attributes", .must },
+        .{ s.fmt("userName sw \"{s}\" and name pr", .{p}), 3, "pr matches a complex attribute with a value", .must },
         .{ s.fmt("userName sw \"{s}\" and userName gt \"{s}\"", .{ p, alice }), 2, "gt compares strings lexicographically", .must },
         .{ s.fmt("userName sw \"{s}\" and userName ge \"{s}\"", .{ p, bob }), 2, "ge includes the value", .must },
         .{ s.fmt("userName sw \"{s}\" and userName lt \"{s}\"", .{ p, bob }), 1, "lt excludes the value", .must },
