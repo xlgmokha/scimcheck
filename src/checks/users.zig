@@ -124,8 +124,14 @@ fn readOnlyInput(s: *Suite) void {
     _ = s.check(.must, ref, !eql(j.string(j.path(created, "meta.created")), "2000-01-01T00:00:00Z"), "client-supplied meta.created is ignored", null);
 }
 
-/// RFC 7643 §2.1 (case-insensitive names) and RFC 7644 §3.1/§8.1 (media types).
+/// RFC 7643 §2.1 (case-insensitive names) and RFC 7644 §3.1, §3.8 and §8.1 (media types).
 fn requestFormat(s: *Suite) void {
+    if (s.send(.GET, s.users_endpoint, .{ .accept = Client.media_type })) |res| {
+        if (s.expectStatus(.must, "RFC7644 §3.8", res, .ok, "Accept: application/scim+json is supported")) s.expectMediaType(res);
+    }
+    if (s.send(.GET, s.users_endpoint, .{ .accept = "application/json" })) |res| {
+        _ = s.expectStatus(.should, "RFC7644 §3.8", res, .ok, "Accept: application/json is supported");
+    }
     const name = s.userName("case");
     const shouting = s.fmt("{{\"SCHEMAS\":[\"{s}\"],\"USERNAME\":{f},\"Name\":{{\"GIVENNAME\":\"Loud\"}}}}", .{ urn.user, std.json.fmt(name, .{}) });
     if (s.send(.POST, s.users_endpoint, .{ .body = shouting })) |res| {

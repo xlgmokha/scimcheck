@@ -11,7 +11,7 @@ or configuration a client cannot see.
 | § | Topic | Checked by | Coverage |
 |---|-------|------------|----------|
 | 2 | Authentication and authorization | auth | 401 without credentials, with an invalid token, with another scheme, with an empty bearer token; `WWW-Authenticate`; RFC 6750 `invalid_token`. Authorization policy (what a token may see) is server-specific. |
-| 3.1 | Media type | users, discovery, groups | `application/scim+json` on responses; `application/json` accepted on requests |
+| 3.1 | Media type | users, discovery, groups | `application/scim+json` on responses; `application/json` accepted on requests; `Accept` with either media type |
 | 3.2 | Endpoints and methods | errors | unknown endpoints 404, unsupported methods 405 + `Allow` |
 | 3.3 | Creating resources | users, groups, extensions, errors | 201, `Location`, `meta`, response body, 409 `uniqueness`, 400 for invalid input |
 | 3.3.1 | Resource types | discovery | endpoints are taken from `/ResourceTypes` |

@@ -31,6 +31,7 @@ pub const Options = struct {
     if_match: ?[]const u8 = null,
     if_none_match: ?[]const u8 = null,
     content_type: []const u8 = media_type,
+    accept: []const u8 = media_type ++ ", application/json",
 };
 
 pub const Response = struct {
@@ -109,7 +110,7 @@ pub fn send(c: *Client, arena: Allocator, method: http.Method, target: []const u
     const uri = try std.Uri.parse(url);
 
     var extra: std.ArrayList(http.Header) = .empty;
-    try extra.append(arena, .{ .name = "Accept", .value = media_type ++ ", application/json" });
+    try extra.append(arena, .{ .name = "Accept", .value = options.accept });
     if (options.if_match) |v| try extra.append(arena, .{ .name = "If-Match", .value = v });
     if (options.if_none_match) |v| try extra.append(arena, .{ .name = "If-None-Match", .value = v });
 
