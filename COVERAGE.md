@@ -37,7 +37,7 @@ or configuration a client cannot see.
 | 3.12 | Errors | every section | Error schema, `status` as a string, the expected `scimType`, unknown `scimType` values; 400/401/403/404/405/409/412/413/501. `tooMany`, `sensitive` and `invalidVers` depend on server policy and are not triggered. |
 | 3.13 | Protocol versioning | none | Not testable: there is no negotiable version. |
 | 3.14 | Versioning with ETags | etag, users | ETag syntax, stability and change, `meta.version`, `If-None-Match` 304, `If-Match` 412 on PUT/PATCH/DELETE, `If-Match: *` |
-| 4 | Discovery endpoints | discovery, auth | shape of all three endpoints, single-item and unknown lookups, 403 for filters, pagination parameters ignored on `/ResourceTypes` and `/Schemas`, unauthenticated access as INFO |
+| 4 | Discovery endpoints | discovery, auth | shape of all three endpoints, single-item and unknown lookups, 403 for filters, pagination parameters ignored on `/ResourceTypes` and `/Schemas`, unauthenticated access to ServiceProviderConfig's `authenticationSchemes` |
 | 5 | Internationalized strings | none | Not covered: PRECIS comparison rules are not exercised. |
 | 6 | Multi-tenancy | none | Not testable from one tenant. |
 | 7 | Security | auth | **Partial.** The service provider is reached over TLS (§7.2; skipped for loopback addresses). TLS versions, token handling and logging are not visible to a client. |

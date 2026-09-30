@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const check = @import("../check.zig");
+const j = @import("../json.zig");
 const Suite = check.Suite;
 
 pub fn run(s: *Suite) void {
@@ -28,8 +29,12 @@ pub fn run(s: *Suite) void {
     if (s.send(.GET, s.users_endpoint, .{ .authorization = "Basic c2NpbWNoZWNrOm5vcGU=" })) |res| {
         _ = s.expectStatus(.must, ref, res, .unauthorized, "an unsupported authentication scheme returns 401");
     }
+    // RFC 7643 §5: the service provider SHOULD make authenticationSchemes
+    // publicly accessible without prior authentication.
     if (s.send(.GET, "/ServiceProviderConfig", .{ .authenticate = false })) |res| {
-        _ = s.expectStatusIn(.may, "RFC7644 §4", res, &.{.ok}, "discovery endpoints are readable without credentials");
+        if (s.expectStatusIn(.should, "RFC7643 §5", res, &.{.ok}, "ServiceProviderConfig is readable without credentials")) {
+            _ = s.check(.should, "RFC7643 §5", j.field(s.json(res), "authenticationSchemes") != null, "  authenticationSchemes is present", null);
+        }
     }
 }
 
