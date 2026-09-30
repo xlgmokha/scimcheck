@@ -16,12 +16,35 @@ pub fn run(s: *Suite) void {
     const schemas = schemaList(s);
     crossReference(s, types, schemas);
     individualEndpoints(s, types, schemas);
+    queryParamsIgnored(s, types, schemas);
 
     if (s.send(.GET, "/ResourceTypes?filter=name%20eq%20%22User%22", .{})) |res| {
         s.expectError(.should, "RFC7644 §4", res, .forbidden, null, "filtering /ResourceTypes returns 403");
     }
     if (s.send(.GET, "/Schemas?filter=id%20pr", .{})) |res| {
         s.expectError(.should, "RFC7644 §4", res, .forbidden, null, "filtering /Schemas returns 403");
+    }
+}
+
+/// RFC 7644 §4: pagination/sorting query parameters SHALL be ignored on the
+/// discovery endpoints (filtering has its own 403 carve-out, checked below).
+fn queryParamsIgnored(s: *Suite, types: []const Value, schemas: []const Value) void {
+    const ref = "RFC7644 §4";
+    if (types.len > 1) {
+        if (s.send(.GET, "/ResourceTypes?count=1", .{})) |res| {
+            if (s.expectList(ref, res, "GET /ResourceTypes?count=1 returns a ListResponse")) |body| {
+                const resources = j.array(j.field(body, "Resources")) orelse &.{};
+                _ = s.check(.must, ref, resources.len == types.len, "pagination parameters on /ResourceTypes are ignored", null);
+            }
+        }
+    }
+    if (schemas.len > 1) {
+        if (s.send(.GET, "/Schemas?count=1", .{})) |res| {
+            if (s.expectList(ref, res, "GET /Schemas?count=1 returns a ListResponse")) |body| {
+                const resources = j.array(j.field(body, "Resources")) orelse &.{};
+                _ = s.check(.must, ref, resources.len == schemas.len, "pagination parameters on /Schemas are ignored", null);
+            }
+        }
     }
 }
 
