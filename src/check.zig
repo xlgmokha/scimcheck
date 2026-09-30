@@ -114,6 +114,7 @@ pub const Capabilities = struct {
     etag: bool = true,
     max_results: ?i64 = null,
     bulk_max_operations: ?i64 = null,
+    bulk_max_payload_size: ?i64 = null,
 };
 
 /// A user created by the suite. The three shared fixtures sort differently

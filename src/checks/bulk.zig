@@ -43,6 +43,8 @@ pub fn run(s: *Suite) void {
         }
     }
 
+    if (user_location) |loc| modify(s, loc);
+
     // failOnErrors=1 stops processing after the first error.
     const failing = s.fmt(
         \\{{"schemas":["{s}"],"failOnErrors":1,"Operations":[{{"method":"POST","path":{f},"bulkId":"bad","data":{{"schemas":["{s}"]}}}},{{"method":"POST","path":{f},"bulkId":"never","data":{s}}}]}}
@@ -53,7 +55,27 @@ pub fn run(s: *Suite) void {
             const never = j.findBy(results, "bulkId", "never");
             if (j.string(j.field(never, "location"))) |loc| s.created.append(s.arena, loc) catch {};
             _ = s.check(.must, ref, never == null, "  operations after failOnErrors is reached are not processed", r.body);
-            _ = s.check(.must, ref, j.string(j.field(j.findBy(results, "bulkId", "bad"), "status")) != null and !eql(j.string(j.field(j.findBy(results, "bulkId", "bad"), "status")), "201"), "  the failed operation reports its error status", r.body);
+            const bad = j.findBy(results, "bulkId", "bad");
+            _ = s.check(.must, ref, j.string(j.field(bad, "status")) != null and !eql(j.string(j.field(bad, "status")), "201"), "  the failed operation reports its error status", r.body);
+            // RFC 7644 §3.7.3: a non-2xx result MUST include the response body.
+            _ = s.check(.must, "RFC7644 §3.7.3", j.hasSchema(j.field(bad, "response"), urn.@"error"), "  the failed operation includes its error response", r.body);
+        }
+    }
+
+    // RFC 7644 §3.7.4: a request over maxPayloadSize is rejected with 413.
+    if (s.caps.bulk_max_payload_size) |max| {
+        if (max > 0 and max <= 8 << 20) {
+            const padding = s.arena.alloc(u8, @intCast(max)) catch return;
+            @memset(padding, 'x');
+            const data = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"displayName\":\"{s}\"}}", .{ urn.user, std.json.fmt(s.userName("bulk-huge"), .{}), padding });
+            const huge = s.fmt("{{\"schemas\":[\"{s}\"],\"Operations\":[{{\"method\":\"POST\",\"path\":{f},\"bulkId\":\"huge\",\"data\":{s}}}]}}", .{ urn.bulk_request, std.json.fmt(s.users_endpoint, .{}), data });
+            if (s.send(.POST, "/Bulk", .{ .body = huge })) |r| {
+                s.expectError(.must, "RFC7644 §3.7.4", r, .payload_too_large, null, "a request larger than maxPayloadSize returns 413");
+                if (r.status == .ok) {
+                    const results = j.array(j.field(s.json(r), "Operations")) orelse &.{};
+                    if (j.string(j.field(j.findBy(results, "bulkId", "huge"), "location"))) |loc| s.created.append(s.arena, loc) catch {};
+                }
+            }
         }
     }
 
@@ -71,5 +93,39 @@ pub fn run(s: *Suite) void {
                 s.expectError(.must, ref, r, .payload_too_large, null, "more than maxOperations returns 413");
             }
         }
+    }
+}
+
+/// PUT, PATCH and DELETE of the User created in bulk, in one request. Each
+/// result reports its method, location and status (RFC 7644 §3.7.3).
+fn modify(s: *Suite, location: []const u8) void {
+    const ref = "RFC7644 §3.7";
+    const id = location[(std.mem.findScalarLast(u8, location, '/') orelse return) + 1 ..];
+    const path = s.fmt("{s}/{s}", .{ s.users_endpoint, id });
+    const payload = s.fmt(
+        \\{{"schemas":["{s}"],"Operations":[{{"method":"PUT","path":{f},"data":{s}}},{{"method":"PATCH","path":{f},"data":{s}}},{{"method":"DELETE","path":{f}}}]}}
+    , .{
+        urn.bulk_request,
+        std.json.fmt(path, .{}),
+        s.userJson(.{ .user_name = s.userName("bulk"), .display_name = "Bulk Replaced" }),
+        std.json.fmt(path, .{}),
+        s.patchJson("{\"op\":\"replace\",\"path\":\"displayName\",\"value\":\"Bulk Patched\"}"),
+        std.json.fmt(path, .{}),
+    });
+    const res = s.send(.POST, "/Bulk", .{ .body = payload }) orelse return;
+    if (!s.expectStatus(.must, ref, res, .ok, "POST /Bulk with PUT, PATCH and DELETE returns 200")) return;
+    const results = j.array(j.field(s.json(res), "Operations")) orelse &.{};
+    const Want = struct { []const u8, []const []const u8 };
+    const wants = [_]Want{ .{ "PUT", &.{"200"} }, .{ "PATCH", &.{ "200", "204" } }, .{ "DELETE", &.{"204"} } };
+    for (wants, 0..) |want, i| {
+        const method, const statuses = want;
+        const result = if (i < results.len) results[i] else null;
+        const status = j.string(j.field(result, "status")) orelse "";
+        var ok = false;
+        for (statuses) |st| ok = ok or std.mem.eql(u8, st, status);
+        _ = s.check(.must, "RFC7644 §3.7.3", ok and std.ascii.eqlIgnoreCase(j.string(j.field(result, "method")) orelse "", method) and j.string(j.field(result, "location")) != null, s.fmt("  {s} reports its method, location and a {s} status", .{ method, statuses[0] }), res.body);
+    }
+    if (s.send(.GET, path, .{})) |gone| {
+        _ = s.expectStatus(.must, ref, gone, .not_found, "  the User deleted in bulk is gone");
     }
 }
