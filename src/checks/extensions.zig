@@ -33,6 +33,7 @@ pub fn run(s: *Suite) void {
     _ = s.check(.must, ref, eql(j.string(j.field(stored, "employeeNumber")), number) and eql(j.string(j.field(stored, "department")), "Research"), "extension attributes are stored under the extension URN", res.body);
     _ = s.check(.must, "RFC7643 §4.3", eql(j.string(j.field(stored, "organization")), "Acme Corp") and eql(j.string(j.field(stored, "division")), "Platform Engineering"), "organization and division are stored under the extension URN", res.body);
     _ = s.check(.should, "RFC7643 §4.3", eql(j.string(j.path(stored, "manager.value")), f[0].id), "manager.value references the manager's id", res.body);
+    _ = s.check(.should, "RFC7643 §4.3", j.string(j.path(stored, "manager.$ref")) != null, "manager.$ref is populated", res.body);
     _ = s.check(.must, "RFC7643 §4.3", !eql(j.string(j.path(stored, "manager.displayName")), "scimcheck fake manager"), "a client-supplied manager.displayName (readOnly) is ignored", res.body);
 
     if (s.fetch("RFC7644 §3.4.1", path)) |got| {
