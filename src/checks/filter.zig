@@ -93,6 +93,15 @@ pub fn run(s: *Suite) void {
             s.expectError(.must, ref, res, .bad_request, "invalidFilter", s.fmt("{s} returns 400 invalidFilter", .{c[1]}));
         }
     }
+
+    // RFC 7644 §7.5.2: a GET filter on sensitive personal information
+    // (e.g. password) SHOULD be refused with 403.
+    if (s.send(.GET, s.fmt("{s}?filter={s}", .{ s.users_endpoint, s.escape("password eq \"x\"") }), .{})) |res| {
+        if (s.expectStatus(.should, "RFC7644 §7.5.2", res, .forbidden, "a filter on a sensitive attribute (password) returns 403")) {
+            const scim_type = j.string(j.field(s.json(res), "scimType"));
+            _ = s.check(.may, "RFC7644 §7.5.2", check.eql(scim_type, "sensitive"), "  scimType is sensitive", res.body);
+        }
+    }
 }
 
 fn upper(s: *Suite, v: []const u8) []const u8 {

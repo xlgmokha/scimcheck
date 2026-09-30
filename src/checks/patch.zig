@@ -135,13 +135,13 @@ fn multiValued(s: *Suite, path: []const u8, work_email: []const u8) void {
     }
 
     // RFC 7644 §3.5.2: setting primary on one value clears it on the others.
-    s.expectPatch("RFC7643 §2.4", path,
+    s.expectPatch("RFC7644 §3.5.2", path,
         \\{"op":"add","path":"emails","value":[{"value":"carol@primary.example.com","type":"other","primary":true}]}
     , "add a new primary value", null, null);
     if (s.fetch(ref, path)) |v| {
         const emails = j.array(j.field(v, "emails"));
         const new = j.findBy(emails, "value", "carol@primary.example.com");
-        _ = s.check(.must, "RFC7643 §2.4", check.primaryCount(emails) == 1 and j.boolean(j.field(new, "primary")) == true, "  the new value is the only primary", s.fmt("{f}", .{std.json.fmt(emails, .{})}));
+        _ = s.check(.must, "RFC7644 §3.5.2", check.primaryCount(emails) == 1 and j.boolean(j.field(new, "primary")) == true, "  the new value is the only primary", s.fmt("{f}", .{std.json.fmt(emails, .{})}));
     }
 
     s.expectPatch("RFC7644 §3.5.2.3", path,
@@ -220,7 +220,7 @@ fn errors(s: *Suite, path: []const u8) void {
         .{ "{\"op\":\"replace\",\"path\":\"emails[type eq]\",\"value\":\"x\"}", "invalidPath", "a malformed path returns 400 invalidPath", .must },
         .{ "{\"op\":\"replace\",\"path\":\"id\",\"value\":\"new-id\"}", "mutability", "replacing a readOnly attribute (id) returns 400 mutability", .must },
         .{ "{\"op\":\"add\",\"path\":\"groups\",\"value\":[{\"value\":\"g\"}]}", "mutability", "adding to a readOnly attribute (groups) returns 400 mutability", .must },
-        .{ "{\"op\":\"remove\",\"path\":\"userName\"}", null, "removing a required attribute returns 400", .must },
+        .{ "{\"op\":\"remove\",\"path\":\"userName\"}", "mutability", "removing a required attribute returns 400 mutability", .must },
         .{ "{\"op\":\"add\",\"path\":\"displayName\"}", null, "add without a value returns 400", .must },
         .{ "{\"op\":\"replace\",\"path\":\"active\",\"value\":\"yes\"}", null, "a value of the wrong type returns 400", .must },
         .{ "{\"op\":\"add\",\"path\":\"x509Certificates\",\"value\":[{\"value\":\"!!!not base64\"}]}", null, "a binary value that is not base64 returns 400", .must },

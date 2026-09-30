@@ -53,6 +53,11 @@ pub fn run(s: *Suite) void {
     primary(s);
     unassigned(s);
     everyAttribute(s);
+    caseExactValue(s);
+    addressCountry(s);
+    groupsReadOnly(s);
+    canonicalization(s);
+    duplicateValue(s);
 
     if (s.send(.GET, path, .{})) |got| {
         if (s.expectStatus(.must, "RFC7644 §3.4.1", got, .ok, "GET /Users/{id} returns 200")) {
@@ -77,7 +82,7 @@ pub fn run(s: *Suite) void {
         s.expectError(.must, "RFC7644 §3.6", gone, .not_found, null, "GET a deleted User returns 404");
     }
     if (s.send(.DELETE, path, .{})) |again| {
-        s.expectError(.should, "RFC7644 §3.6", again, .not_found, null, "DELETE a deleted User returns 404");
+        s.expectError(.must, "RFC7644 §3.6", again, .not_found, null, "DELETE a deleted User returns 404");
     }
     if (s.caps.filter) {
         s.expectCount("RFC7644 §3.6", .must, s.fmt("userName eq \"{s}\"", .{user_name}), 0, "a deleted User is omitted from queries");
@@ -269,22 +274,124 @@ fn unassigned(s: *Suite) void {
     }
 }
 
-/// RFC 7643 §2.4: "primary" is true for at most one value.
+/// RFC 7643 §2.4: "primary" is true for at most one value, checked on every
+/// multi-valued User attribute that has a "primary" sub-attribute.
+const primary_attrs = [_]struct { []const u8, []const u8 }{
+    .{ "phoneNumbers", "[{\"value\":\"555-0100\",\"type\":\"work\",\"primary\":true},{\"value\":\"555-0101\",\"type\":\"home\",\"primary\":true}]" },
+    .{ "ims", "[{\"value\":\"handle1\",\"type\":\"aim\",\"primary\":true},{\"value\":\"handle2\",\"type\":\"gtalk\",\"primary\":true}]" },
+    .{ "photos", "[{\"value\":\"https://photos.example.com/a.jpg\",\"type\":\"photo\",\"primary\":true},{\"value\":\"https://photos.example.com/b.jpg\",\"type\":\"thumbnail\",\"primary\":true}]" },
+    .{ "entitlements", "[{\"value\":\"scimcheck-ent-a\",\"primary\":true},{\"value\":\"scimcheck-ent-b\",\"primary\":true}]" },
+    .{ "roles", "[{\"value\":\"scimcheck-role-a\",\"primary\":true},{\"value\":\"scimcheck-role-b\",\"primary\":true}]" },
+    .{ "x509Certificates", "[{\"value\":\"MTIz\",\"primary\":true},{\"value\":\"NDU2\",\"primary\":true}]" },
+};
+
 fn primary(s: *Suite) void {
     const ref = "RFC7643 §2.4";
+    for (primary_attrs) |entry| {
+        const name, const values = entry;
+        const body = s.userJson(.{
+            .user_name = s.userName(s.fmt("primary-{s}", .{name})),
+            .extra = s.fmt("\"{s}\":{s},", .{ name, values }),
+        });
+        const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse continue;
+        s.trackCreated(s.users_endpoint, res);
+        if (res.status == .bad_request) {
+            _ = s.check(.must, ref, true, s.fmt("  {s}: two primary values are rejected or normalized", .{name}), null);
+            s.expectErrorBody(res, "invalidValue");
+            continue;
+        }
+        if (!s.expectStatus(.must, ref, res, .created, s.fmt("  {s}: POST with two primary values returns 400 or 201", .{name}))) continue;
+        _ = s.check(.must, ref, check.primaryCount(j.array(j.field(s.json(res), name))) <= 1, s.fmt("  {s}: at most one value is primary", .{name}), res.body);
+    }
+}
+
+/// RFC 7643 §7: a caseExact attribute keeps the case it was submitted with.
+fn caseExactValue(s: *Suite) void {
+    const ref = "RFC7643 §7";
+    const mixed = "MiXeD-CaSe-ExternalId";
+    const res = s.send(.POST, s.users_endpoint, .{ .body = s.userJson(.{ .user_name = s.userName("caseexact"), .external_id = mixed }) }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (!s.expectStatus(.must, ref, res, .created, "POST with a mixed-case externalId returns 201")) return;
+    const id = j.string(j.field(s.json(res), "id")) orelse return;
+    const got = s.fetch(ref, s.fmt("{s}/{s}", .{ s.users_endpoint, id })) orelse return;
+    _ = s.check(.must, ref, eql(j.string(j.field(got, "externalId")), mixed), "  externalId keeps the submitted case", s.fmt("{f}", .{std.json.fmt(got, .{})}));
+}
+
+/// RFC 7643 §4.1.2: an address's country value MUST be ISO 3166-1 alpha-2.
+fn addressCountry(s: *Suite) void {
+    const ref = "RFC7643 §4.1.2";
     const body = s.userJson(.{
-        .user_name = s.userName("primary"),
-        .extra = "\"phoneNumbers\":[{\"value\":\"555-0100\",\"type\":\"work\",\"primary\":true},{\"value\":\"555-0101\",\"type\":\"home\",\"primary\":true}],",
+        .user_name = s.userName("country"),
+        .extra = "\"addresses\":[{\"type\":\"work\",\"country\":\"United States\"}],",
     });
     const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
     s.trackCreated(s.users_endpoint, res);
     if (res.status == .bad_request) {
-        _ = s.check(.must, ref, true, "two primary values are rejected or normalized", null);
-        s.expectErrorBody(res, "invalidValue");
+        _ = s.check(.must, ref, true, "  a non-alpha-2 country is rejected", null);
         return;
     }
-    if (!s.expectStatus(.must, ref, res, .created, "POST with two primary values returns 400 or 201")) return;
-    _ = s.check(.must, ref, check.primaryCount(j.array(j.field(s.json(res), "phoneNumbers"))) <= 1, "at most one value is primary", res.body);
+    if (!s.expectStatus(.must, ref, res, .created, "  POST with a non-alpha-2 country returns 400 or 201")) return;
+    const addresses = j.array(j.field(s.json(res), "addresses"));
+    const country = if (addresses != null and addresses.?.len > 0) j.string(j.field(addresses.?[0], "country")) else null;
+    _ = s.check(.must, ref, country != null and country.?.len == 2, "  a non-alpha-2 country is normalized to two letters", country);
+}
+
+/// RFC 7643 §4.1.2: User.groups is readOnly - membership changes go through
+/// the Group resource, not a direct write here.
+fn groupsReadOnly(s: *Suite) void {
+    const ref = "RFC7643 §4.1.2";
+    const body = s.userJson(.{
+        .user_name = s.userName("groupsreadonly"),
+        .extra = "\"groups\":[{\"value\":\"scimcheck-fake-group\",\"display\":\"Fake\"}],",
+    });
+    const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (!s.expectStatus(.must, ref, res, .created, "POST with a client-supplied groups value returns 201")) return;
+    const groups = j.array(j.field(s.json(res), "groups"));
+    _ = s.check(.must, ref, j.findBy(groups, "value", "scimcheck-fake-group") == null, "  a client-supplied groups value is ignored", res.body);
+}
+
+/// RFC 7643 §4.1.2: emails, phoneNumbers and ims SHOULD be canonicalized -
+/// canonicalizing and leaving the value as submitted are both allowed.
+const canonicalization_attrs = [_]struct { []const u8, []const u8 }{
+    .{ "emails", "[{\"value\":\"BJensen@EXAMPLE.COM\",\"type\":\"work\"}]" },
+    .{ "phoneNumbers", "[{\"value\":\"(555) 555-0100\",\"type\":\"work\"}]" },
+    .{ "ims", "[{\"value\":\" SomeAIMHandle \",\"type\":\"aim\"}]" },
+};
+
+fn canonicalization(s: *Suite) void {
+    const ref = "RFC7643 §4.1.2";
+    for (canonicalization_attrs) |entry| {
+        const name, const value = entry;
+        const body = s.userJson(.{
+            .user_name = s.userName(s.fmt("canon-{s}", .{name})),
+            .extra = s.fmt("\"{s}\":{s},", .{ name, value }),
+        });
+        const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse continue;
+        s.trackCreated(s.users_endpoint, res);
+        if (!s.expectStatus(.must, ref, res, .created, s.fmt("  {s}: POST with a non-canonical value returns 201", .{name}))) continue;
+        const items = j.array(j.field(s.json(res), name));
+        const stored = if (items != null and items.?.len > 0) j.string(j.field(items.?[0], "value")) else null;
+        _ = s.check(.should, ref, stored != null and stored.?.len > 0, s.fmt("  {s}: a non-canonical value is not dropped", .{name}), stored);
+    }
+}
+
+/// RFC 7643 §2.4: a multi-valued attribute SHOULD NOT return the same
+/// (type, value) combination more than once.
+fn duplicateValue(s: *Suite) void {
+    const ref = "RFC7643 §2.4";
+    const body = s.userJson(.{
+        .user_name = s.userName("dupvalue"),
+        .extra = "\"phoneNumbers\":[{\"value\":\"555-0199\",\"type\":\"work\"},{\"value\":\"555-0199\",\"type\":\"work\"}],",
+    });
+    const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (!s.expectStatusIn(.must, ref, res, &.{ .created, .bad_request }, "POST with a duplicate (type, value) pair returns 201 or 400") or res.status == .bad_request) return;
+    var matches: usize = 0;
+    for (j.array(j.field(s.json(res), "phoneNumbers")) orelse &.{}) |item| {
+        if (eql(j.string(j.field(item, "value")), "555-0199") and eql(j.string(j.field(item, "type")), "work")) matches += 1;
+    }
+    _ = s.check(.should, ref, matches <= 1, "  the same (type, value) combination is not returned more than once", res.body);
 }
 
 fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, created: Client.Response) void {
@@ -307,7 +414,8 @@ fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, c
     // PUT replaces the whole resource: an attribute left out is cleared.
     if (s.send(.PUT, path, .{ .body = s.userJson(.{ .user_name = user_name, .display_name = "Babs Jensen" }) })) |again| {
         if (s.expectStatus(.must, ref, again, .ok, "PUT without nickName returns 200")) {
-            _ = s.check(.should, ref, j.field(s.json(again), "nickName") == null, "  PUT clears attributes it does not include", again.body);
+            // RFC 7644 §3.5.1: an omitted attribute MAY be cleared or defaulted, both allowed.
+            _ = s.check(.may, ref, j.field(s.json(again), "nickName") == null, "  PUT clears attributes it does not include", again.body);
         }
     }
     const without_user_name = s.fmt("{{\"schemas\":[\"{s}\"],\"displayName\":\"x\"}}", .{urn.user});

@@ -16,6 +16,7 @@ pub fn run(s: *Suite) void {
     const schemas = schemaList(s);
     crossReference(s, types, schemas);
     individualEndpoints(s, types, schemas);
+    unknownQueryParamIgnored(s);
 
     if (s.send(.GET, "/ResourceTypes?filter=name%20eq%20%22User%22", .{})) |res| {
         s.expectError(.should, "RFC7644 §4", res, .forbidden, null, "filtering /ResourceTypes returns 403");
@@ -89,7 +90,7 @@ fn serviceProviderConfig(s: *Suite) void {
     if (!s.expectStatus(.must, "RFC7644 §4", res, .ok, "GET /ServiceProviderConfig returns 200")) return;
     s.expectMediaType(res);
     const body = s.json(res);
-    _ = s.check(.must, ref, j.hasSchema(body, urn.service_provider_config), "ServiceProviderConfig lists its schema URN", null);
+    _ = s.check(.must, "RFC7644 §4", j.hasSchema(body, urn.service_provider_config), "ServiceProviderConfig lists its schema URN", null);
     inline for (.{ "patch", "bulk", "filter", "changePassword", "sort", "etag" }) |feature| {
         _ = s.check(.must, ref, j.boolean(j.path(body, feature ++ ".supported")) != null, feature ++ ".supported is a boolean", null);
     }
@@ -202,12 +203,23 @@ fn attributeProblem(s: *Suite, attributes: []const Value, parent: []const u8) ?[
             const subs = j.array(j.field(attr, "subAttributes")) orelse return s.fmt("{s}: complex attribute without subAttributes", .{qualified});
             if (parent.len > 0) return s.fmt("{s}: complex attributes cannot nest (RFC 7643 §2.3.8)", .{qualified});
             if (attributeProblem(s, subs, qualified)) |p| return p;
+        } else if (j.array(j.field(attr, "subAttributes")) != null) {
+            // RFC 7643 §1.2: a simple attribute MUST NOT contain sub-attributes.
+            return s.fmt("{s}: type \"{s}\" is not complex but has subAttributes (RFC 7643 §1.2)", .{ qualified, t });
         }
         if (std.mem.eql(u8, t, "reference") and j.array(j.field(attr, "referenceTypes")) == null) {
             return s.fmt("{s}: reference attribute without referenceTypes", .{qualified});
         }
     }
     return null;
+}
+
+/// RFC 7644 §3.4.2: unrecognized query parameters SHOULD be ignored rather
+/// than rejected.
+fn unknownQueryParamIgnored(s: *Suite) void {
+    if (s.send(.GET, s.fmt("{s}?scimcheckUnknownParam=1", .{s.users_endpoint}), .{})) |res| {
+        _ = s.expectStatus(.should, "RFC7644 §3.4.2", res, .ok, "an unrecognized query parameter is ignored rather than rejected");
+    }
 }
 
 fn oneOf(set: []const []const u8, v: []const u8) bool {

@@ -39,16 +39,18 @@ pub fn run(s: *Suite) void {
     }
 
     const body = s.userJson(.{ .user_name = fixture.user_name, .display_name = "Versioned" });
+    // RFC 7232 §3.1: the origin server MUST reject a request whose If-Match
+    // condition fails with 412.
     if (s.send(.PUT, fixture.path, .{ .body = body, .if_match = stale })) |r| {
-        s.expectError(.must, ref, r, .precondition_failed, null, "PUT with a stale If-Match returns 412");
+        s.expectError(.must, "RFC7232 §3.1", r, .precondition_failed, null, "PUT with a stale If-Match returns 412");
     }
     if (s.caps.patch) {
         if (s.send(.PATCH, fixture.path, .{ .body = s.patchJson("{\"op\":\"replace\",\"path\":\"displayName\",\"value\":\"x\"}"), .if_match = stale })) |r| {
-            s.expectError(.must, ref, r, .precondition_failed, null, "PATCH with a stale If-Match returns 412");
+            s.expectError(.must, "RFC7232 §3.1", r, .precondition_failed, null, "PATCH with a stale If-Match returns 412");
         }
     }
     if (s.send(.DELETE, fixture.path, .{ .if_match = stale })) |r| {
-        s.expectError(.must, ref, r, .precondition_failed, null, "DELETE with a stale If-Match returns 412");
+        s.expectError(.must, "RFC7232 §3.1", r, .precondition_failed, null, "DELETE with a stale If-Match returns 412");
     }
     if (s.fetch(ref, fixture.path)) |v| {
         _ = s.check(.must, ref, !eql(j.string(j.field(v, "displayName")), "Versioned"), "a failed precondition leaves the resource unchanged", null);

@@ -1,5 +1,6 @@
-//! Bulk operations (RFC 7644 §3.7): bulkId references, failOnErrors and
-//! maxOperations, or 501 when bulk is unsupported.
+//! Bulk operations (RFC 7644 §3.7): bulkId references, required fields,
+//! continuing after a failure, failOnErrors, maxOperations and
+//! maxPayloadSize, or 501 when bulk is unsupported.
 const std = @import("std");
 
 const check = @import("../check.zig");
@@ -46,7 +47,9 @@ pub fn run(s: *Suite) void {
 
     if (user_location) |loc| modify(s, loc);
     if (s.groups_endpoint) |endpoint| circular(s, endpoint);
-    bulkIds(s);
+    missingBulkId(s);
+    duplicateBulkId(s);
+    continuesAfterFailure(s);
     failedDelete(s);
     if (s.caps.etag) versions(s);
 
@@ -137,6 +140,38 @@ fn modify(s: *Suite, location: []const u8) void {
     }
 }
 
+/// RFC 7644 §3.7: bulkId is REQUIRED when "method" is "POST". Accept either
+/// the whole request rejected, or the operation reporting its own error.
+fn missingBulkId(s: *Suite) void {
+    const ref = "RFC7644 §3.7";
+    const payload = s.fmt(
+        \\{{"schemas":["{s}"],"Operations":[{{"method":"POST","path":{f},"data":{s}}}]}}
+    , .{ urn.bulk_request, std.json.fmt(s.users_endpoint, .{}), s.userJson(.{ .user_name = s.userName("bulk-nobulkid") }) });
+    const res = s.send(.POST, "/Bulk", .{ .body = payload }) orelse return;
+    if (!s.expectStatusIn(.must, ref, res, &.{ .ok, .bad_request }, "  a POST operation missing bulkId is rejected, whole request or per-operation")) return;
+    if (res.status == .bad_request) return;
+    const results = j.array(j.field(s.json(res), "Operations")) orelse &.{};
+    const op = if (results.len > 0) results[0] else null;
+    if (j.string(j.field(op, "location"))) |loc| s.created.append(s.arena, loc) catch {};
+    _ = s.check(.must, ref, !eql(j.string(j.field(op, "status")), "201"), "  the operation missing bulkId reports an error rather than succeeding", res.body);
+}
+
+/// RFC 7644 §3.7: "The service provider MUST continue performing as many
+/// changes as possible and disregard partial failures" when failOnErrors is
+/// not set.
+fn continuesAfterFailure(s: *Suite) void {
+    const ref = "RFC7644 §3.7";
+    const payload = s.fmt(
+        \\{{"schemas":["{s}"],"Operations":[{{"method":"POST","path":{f},"bulkId":"bad2","data":{{"schemas":["{s}"]}}}},{{"method":"POST","path":{f},"bulkId":"after","data":{s}}}]}}
+    , .{ urn.bulk_request, std.json.fmt(s.users_endpoint, .{}), urn.user, std.json.fmt(s.users_endpoint, .{}), s.userJson(.{ .user_name = s.userName("bulk-after") }) });
+    const res = s.send(.POST, "/Bulk", .{ .body = payload }) orelse return;
+    if (!s.expectStatus(.must, ref, res, .ok, "POST /Bulk without failOnErrors returns 200")) return;
+    const results = j.array(j.field(s.json(res), "Operations")) orelse &.{};
+    const after = j.findBy(results, "bulkId", "after");
+    if (j.string(j.field(after, "location"))) |loc| s.created.append(s.arena, loc) catch {};
+    _ = s.check(.must, ref, eql(j.string(j.field(after, "status")), "201"), "  an operation after a failing one still succeeds without failOnErrors", res.body);
+}
+
 /// RFC 7644 §3.7.1: circular bulkId references MUST be resolved, or the
 /// service provider MAY give up and report 409 for them.
 fn circular(s: *Suite, endpoint: []const u8) void {
@@ -205,21 +240,13 @@ fn rejected(res: Client.Response, op: ?std.json.Value) bool {
     return status.len > 0 and status[0] != '2';
 }
 
-/// RFC 7644 §3.7: "bulkId" is REQUIRED when the method is POST and is
-/// unique within a bulk request.
-fn bulkIds(s: *Suite) void {
-    const ref = "RFC7644 §3.7";
-    if (post(s, createOp(s, null, s.userName("bulk-no-id")))) |o| {
-        // Only a client error fits a missing attribute; a 401 or 5xx does not.
-        const status = j.string(j.field(if (o.ops.len > 0) o.ops[0] else null, "status")) orelse "";
-        const client_error = o.res.status == .bad_request or (o.res.status == .ok and status.len > 0 and status[0] == '4');
-        _ = s.check(.must, ref, client_error, "a POST operation without a bulkId is rejected", o.res.body);
-    }
+/// RFC 7644 §3.7: a bulkId is "unique within a bulk request".
+fn duplicateBulkId(s: *Suite) void {
     const dup = s.fmt("{s},{s}", .{ createOp(s, "dup", s.userName("bulk-dup-a")), createOp(s, "dup", s.userName("bulk-dup-b")) });
     if (post(s, dup)) |o| {
         var failed = o.res.status == .bad_request;
         for (o.ops) |op| failed = failed or rejected(o.res, op);
-        _ = s.check(.should, ref, failed, "two operations with the same bulkId are rejected", o.res.body);
+        _ = s.check(.should, "RFC7644 §3.7", failed, "two operations with the same bulkId are rejected", o.res.body);
     }
 }
 

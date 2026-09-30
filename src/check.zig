@@ -548,6 +548,19 @@ pub fn isEntityTag(v: ?[]const u8) bool {
     return s.len >= 2 and s[0] == '"' and s[s.len - 1] == '"' and std.mem.findScalar(u8, s[1 .. s.len - 1], '"') == null;
 }
 
+/// An absolute or relative URI (RFC 7643 §2.3.7): `scheme://...` or a
+/// relative reference starting with "/". Not wired into any check yet -
+/// for a $ref-bearing attribute (Group member $ref, manager.$ref) to use.
+pub fn isUri(v: ?[]const u8) bool {
+    const s = v orelse return false;
+    if (s.len == 0) return false;
+    if (s[0] == '/') return true;
+    const colon = std.mem.findScalar(u8, s, ':') orelse return false;
+    if (colon == 0) return false;
+    for (s[0..colon]) |c| if (!std.ascii.isAlphanumeric(c) and c != '+' and c != '-' and c != '.') return false;
+    return std.mem.startsWith(u8, s[colon..], "://");
+}
+
 /// Shortens `s` to at most 300 bytes without splitting a UTF-8 sequence.
 pub fn truncate(s: []const u8) []const u8 {
     if (s.len <= 300) return s;
@@ -569,6 +582,14 @@ test isEntityTag {
     try std.testing.expect(!isEntityTag("abc"));
     try std.testing.expect(!isEntityTag("W/abc"));
     try std.testing.expect(!isEntityTag("\"a\"b\""));
+}
+
+test isUri {
+    try std.testing.expect(isUri("https://example.com/Users/123"));
+    try std.testing.expect(isUri("/Users/123"));
+    try std.testing.expect(!isUri("not a uri"));
+    try std.testing.expect(!isUri(""));
+    try std.testing.expect(!isUri(null));
 }
 
 test truncate {
