@@ -144,6 +144,9 @@ fn attributeProblem(s: *Suite, attributes: []const Value, parent: []const u8) ?[
             const subs = j.array(j.field(attr, "subAttributes")) orelse return s.fmt("{s}: complex attribute without subAttributes", .{qualified});
             if (parent.len > 0) return s.fmt("{s}: complex attributes cannot nest (RFC 7643 §2.3.8)", .{qualified});
             if (attributeProblem(s, subs, qualified)) |p| return p;
+        } else if (j.array(j.field(attr, "subAttributes")) != null) {
+            // RFC 7643 §1.2: a simple attribute MUST NOT contain sub-attributes.
+            return s.fmt("{s}: type \"{s}\" is not complex but has subAttributes (RFC 7643 §1.2)", .{ qualified, t });
         }
         if (std.mem.eql(u8, t, "reference") and j.array(j.field(attr, "referenceTypes")) == null) {
             return s.fmt("{s}: reference attribute without referenceTypes", .{qualified});
