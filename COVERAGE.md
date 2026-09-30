@@ -48,7 +48,7 @@ or configuration a client cannot see.
 |---|-------|------------|----------|
 | 2.1 | Case-insensitive attribute names | users, attributes, filter, sort | request bodies, `attributes`, filters, `sortBy` |
 | 2.2 | Attribute characteristics | users, patch, attributes, filter, groups, discovery | readOnly (`id`, `meta`, `groups`), writeOnly/never (`password`), `returned: always` (`id`), `required`, `uniqueness`, `caseExact`, immutable member values |
-| 2.3 | Data types | users, errors, filter, patch | boolean, dateTime and reference values; wrong JSON types rejected; binary values that are not base64 rejected on POST and PATCH. **Partial:** decimal and integer attributes are not in the core schemas. |
+| 2.3 | Data types | users, errors, filter, patch, groups, extensions | boolean, dateTime and reference values; a `$ref` value (Group member, `manager.$ref`) is a well-formed URI (§2.3.7); wrong JSON types rejected; binary values that are not base64 rejected on POST and PATCH. **Partial:** decimal and integer attributes are not in the core schemas. |
 | 2.4 | Multi-valued attributes | users, patch | at most one `primary`, checked on `phoneNumbers`, `ims`, `photos`, `entitlements`, `roles` and `x509Certificates`; setting a new primary clears the others; the same (type, value) combination is not returned more than once |
 | 2.5 | Unassigned and null values | users, filter | PUT clears omitted attributes; `null` and `[]` in a request leave an attribute unassigned; `eq null` and `ne null` in filters |
 | 3 | Resources and `schemas` | users, errors, extensions | `schemas` required, known, without duplicates, and order-independent; extension URNs listed |
