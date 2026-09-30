@@ -94,6 +94,13 @@ fn multiValued(s: *Suite, path: []const u8, work_email: []const u8) void {
         const work = j.findBy(j.array(j.field(v, "emails")), "type", "work");
         _ = s.check(.must, "RFC7644 §3.5.2.1", eql(j.string(j.field(work, "display")), "Work") and eql(j.string(j.field(work, "value")), work_email), "  only the matching value gains display", null);
     }
+    s.expectPatch("RFC7644 §3.5.2.2", path,
+        \\{"op":"remove","path":"emails[type eq \"work\"].display"}
+    , "remove a sub-attribute through a value filter", null, null);
+    if (s.fetch(ref, path)) |v| {
+        const work = j.findBy(j.array(j.field(v, "emails")), "type", "work");
+        _ = s.check(.must, "RFC7644 §3.5.2.2", j.field(work, "display") == null and eql(j.string(j.field(work, "value")), work_email), "  only display is removed from the matching value", null);
+    }
     s.expectPatch("RFC7644 §3.5.2.3", path,
         \\{"op":"replace","path":"emails[type eq \"home\"].value","value":"carol@elsewhere.example.com"}
     , "replace a sub-attribute through a value filter", null, null);
