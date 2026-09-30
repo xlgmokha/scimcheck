@@ -161,7 +161,7 @@ fn primary(s: *Suite) void {
 
 fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, created: Client.Response) void {
     const ref = "RFC7644 §3.5.1";
-    const with_nick = s.userJson(.{ .user_name = user_name, .display_name = "Babs Jensen", .extra = "\"nickName\":\"Babs\",\"id\":\"scimcheck-other-id\"," });
+    const with_nick = s.userJson(.{ .user_name = user_name, .display_name = "Babs Jensen", .extra = "\"nickName\":\"Babs\",\"id\":\"scimcheck-other-id\",\"meta\":{\"created\":\"2000-01-01T00:00:00Z\"}," });
     const put = s.send(.PUT, path, .{ .body = with_nick }) orelse return;
     if (!s.expectStatus(.must, ref, put, .ok, "PUT /Users/{id} returns 200")) return;
     s.expectMediaType(put);
@@ -170,7 +170,7 @@ fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, c
     _ = s.check(.must, ref, eql(j.string(j.field(p, "displayName")), "Babs Jensen") and eql(j.string(j.field(p, "nickName")), "Babs"), "PUT replaces attribute values", put.body);
     _ = s.check(.must, "RFC7643 §3.1", eql(j.string(j.field(p, "id")), id), "PUT ignores an id in the body", null);
     _ = s.check(.must, "RFC7643 §4.1.1", j.field(p, "password") == null, "PUT does not return password", null);
-    _ = s.check(.must, "RFC7643 §3.1", eql(j.string(j.path(p, "meta.created")), j.string(j.path(before, "meta.created")) orelse ""), "meta.created is unchanged by PUT", null);
+    _ = s.check(.must, "RFC7643 §3.1", eql(j.string(j.path(p, "meta.created")), j.string(j.path(before, "meta.created")) orelse ""), "meta.created is unchanged by PUT, even when the body sends one", null);
     _ = s.check(.should, "RFC7643 §3.1", !eql(j.string(j.path(p, "meta.lastModified")), j.string(j.path(before, "meta.lastModified")) orelse ""), "meta.lastModified changes after PUT", null);
     if (s.caps.etag and created.etag != null and put.etag != null) {
         _ = s.check(.should, "RFC7644 §3.14", !std.mem.eql(u8, created.etag.?, put.etag.?), "ETag changes after PUT", null);
