@@ -132,12 +132,10 @@ fn remove(s: *Suite, path: []const u8) void {
     s.expectPatch("RFC7644 §3.5.2.1", path,
         \\{"op":"add","path":"phoneNumbers","value":[{"value":"555-0100","type":"work"},{"value":"555-0101","type":"mobile"}]}
     , "add phoneNumbers", null, null);
-    // RFC 7644 Table 9 names noTarget for a filter with no match, but only
-    // replace requires it (§3.5.2.3), so a no-op success is accepted too.
+    // RFC 7644 Table 9: noTarget "occurs when the specified path value
+    // contains a filter that yields no match".
     if (s.send(.PATCH, path, .{ .body = s.patchJson("{\"op\":\"remove\",\"path\":\"phoneNumbers[type eq \\\"pager\\\"]\"}") })) |res| {
-        if (s.expectStatusIn(.must, ref, res, &.{ .ok, .no_content, .bad_request }, "remove through a filter that matches nothing returns 200, 204 or 400")) {
-            if (res.status == .bad_request) s.expectErrorBody(res, "noTarget");
-        }
+        s.expectError(.should, "RFC7644 §3.12", res, .bad_request, "noTarget", "remove through a filter that matches nothing returns 400 noTarget");
         if (s.fetch(ref, path)) |v| _ = s.check(.must, ref, check.lenOf(j.array(j.field(v, "phoneNumbers"))) == 2, "  no value is removed", null);
     }
     s.expectPatch(ref, path,
