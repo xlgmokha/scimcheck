@@ -33,7 +33,7 @@ or configuration a client cannot see.
 | 3.8 | Data formats | users, errors | JSON only; case-insensitive attribute names; malformed JSON → `invalidSyntax` |
 | 3.9 | Response parameters | attributes | GET, list, POST, PUT and PATCH; `returned: always` and `never` |
 | 3.10 | Attribute notation | attributes, filter, sort, extensions | URN-qualified core and extension attributes in all three |
-| 3.11 | `/Me` | errors | **Partial.** 200, 308 or 501. `/Me` semantics need a token bound to a known user. |
+| 3.11 | `/Me` | errors | **Partial.** 200 (with a Location header), 308 or 501. `/Me` semantics need a token bound to a known user. |
 | 3.12 | Errors | every section | Error schema, `status` as a string, the expected `scimType`, unknown `scimType` values; 400/401/403/404/405/409/412/413/501; `sensitive` (a GET filter on `password`) and `tooMany` (a page beyond `filter.maxResults`) triggered directly. `invalidVers` depends on server policy and is not triggered. |
 | 3.13 | Protocol versioning | none | Not testable: there is no negotiable version. |
 | 3.14 | Versioning with ETags | etag, users | ETag syntax, stability and change, `meta.version`, `If-None-Match` 304, `If-Match` 412 on PUT/PATCH/DELETE, `If-Match: *` |

@@ -93,6 +93,12 @@ pub fn run(s: *Suite) void {
     if (s.send(.GET, "/Me", .{})) |res| {
         if (s.expectStatusIn(.should, "RFC7644 §3.11", res, &.{ .ok, .permanent_redirect, .not_implemented }, "GET /Me returns 200, 308, or 501 when unsupported")) {
             if (res.status == .not_implemented) s.expectErrorBody(res, null);
+            if (res.status == .ok) {
+                // "A service provider MAY process the SCIM request directly.
+                // In any response, the HTTP 'Location' header MUST be the
+                // permanent location of the aliased resource..."
+                _ = s.check(.must, "RFC7644 §3.11", res.location != null, "  a 200 response includes a Location header", null);
+            }
         }
     }
 
