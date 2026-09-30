@@ -264,7 +264,8 @@ fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, c
     // PUT replaces the whole resource: an attribute left out is cleared.
     if (s.send(.PUT, path, .{ .body = s.userJson(.{ .user_name = user_name, .display_name = "Babs Jensen" }) })) |again| {
         if (s.expectStatus(.must, ref, again, .ok, "PUT without nickName returns 200")) {
-            _ = s.check(.should, ref, j.field(s.json(again), "nickName") == null, "  PUT clears attributes it does not include", again.body);
+            // RFC 7644 §3.5.1: an omitted attribute MAY be cleared or defaulted, both allowed.
+            _ = s.check(.may, ref, j.field(s.json(again), "nickName") == null, "  PUT clears attributes it does not include", again.body);
         }
     }
     const without_user_name = s.fmt("{{\"schemas\":[\"{s}\"],\"displayName\":\"x\"}}", .{urn.user});
