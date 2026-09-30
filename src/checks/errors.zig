@@ -45,7 +45,7 @@ pub fn run(s: *Suite) void {
     }
     const unknown_schema = s.fmt("{{\"schemas\":[\"urn:scimcheck:unknown\"],\"userName\":{f}}}", .{std.json.fmt(s.userName("badschema"), .{})});
     if (s.send(.POST, s.users_endpoint, .{ .body = unknown_schema })) |res| {
-        s.expectError(.should, "RFC7643 §3", res, .bad_request, null, "POST a resource with an unknown schema URN returns 400");
+        s.expectError(.must, "RFC7643 §3", res, .bad_request, null, "POST a resource with an unknown schema URN returns 400");
         s.trackCreated(s.users_endpoint, res);
     }
     const wrong_type = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"active\":\"yes\"}}", .{ urn.user, std.json.fmt(s.userName("wrongtype"), .{}) });
