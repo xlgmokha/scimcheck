@@ -227,22 +227,35 @@ fn unassigned(s: *Suite) void {
     }
 }
 
-/// RFC 7643 §2.4: "primary" is true for at most one value.
+/// RFC 7643 §2.4: "primary" is true for at most one value, checked on every
+/// multi-valued User attribute that has a "primary" sub-attribute.
+const primary_attrs = [_]struct { []const u8, []const u8 }{
+    .{ "phoneNumbers", "[{\"value\":\"555-0100\",\"type\":\"work\",\"primary\":true},{\"value\":\"555-0101\",\"type\":\"home\",\"primary\":true}]" },
+    .{ "ims", "[{\"value\":\"handle1\",\"type\":\"aim\",\"primary\":true},{\"value\":\"handle2\",\"type\":\"gtalk\",\"primary\":true}]" },
+    .{ "photos", "[{\"value\":\"https://photos.example.com/a.jpg\",\"type\":\"photo\",\"primary\":true},{\"value\":\"https://photos.example.com/b.jpg\",\"type\":\"thumbnail\",\"primary\":true}]" },
+    .{ "entitlements", "[{\"value\":\"scimcheck-ent-a\",\"primary\":true},{\"value\":\"scimcheck-ent-b\",\"primary\":true}]" },
+    .{ "roles", "[{\"value\":\"scimcheck-role-a\",\"primary\":true},{\"value\":\"scimcheck-role-b\",\"primary\":true}]" },
+    .{ "x509Certificates", "[{\"value\":\"MTIz\",\"primary\":true},{\"value\":\"NDU2\",\"primary\":true}]" },
+};
+
 fn primary(s: *Suite) void {
     const ref = "RFC7643 §2.4";
-    const body = s.userJson(.{
-        .user_name = s.userName("primary"),
-        .extra = "\"phoneNumbers\":[{\"value\":\"555-0100\",\"type\":\"work\",\"primary\":true},{\"value\":\"555-0101\",\"type\":\"home\",\"primary\":true}],",
-    });
-    const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
-    s.trackCreated(s.users_endpoint, res);
-    if (res.status == .bad_request) {
-        _ = s.check(.must, ref, true, "two primary values are rejected or normalized", null);
-        s.expectErrorBody(res, "invalidValue");
-        return;
+    for (primary_attrs) |entry| {
+        const name, const values = entry;
+        const body = s.userJson(.{
+            .user_name = s.userName(s.fmt("primary-{s}", .{name})),
+            .extra = s.fmt("\"{s}\":{s},", .{ name, values }),
+        });
+        const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse continue;
+        s.trackCreated(s.users_endpoint, res);
+        if (res.status == .bad_request) {
+            _ = s.check(.must, ref, true, s.fmt("  {s}: two primary values are rejected or normalized", .{name}), null);
+            s.expectErrorBody(res, "invalidValue");
+            continue;
+        }
+        if (!s.expectStatus(.must, ref, res, .created, s.fmt("  {s}: POST with two primary values returns 400 or 201", .{name}))) continue;
+        _ = s.check(.must, ref, check.primaryCount(j.array(j.field(s.json(res), name))) <= 1, s.fmt("  {s}: at most one value is primary", .{name}), res.body);
     }
-    if (!s.expectStatus(.must, ref, res, .created, "POST with two primary values returns 400 or 201")) return;
-    _ = s.check(.must, ref, check.primaryCount(j.array(j.field(s.json(res), "phoneNumbers"))) <= 1, "at most one value is primary", res.body);
 }
 
 /// RFC 7643 §7: a caseExact attribute keeps the case it was submitted with.
