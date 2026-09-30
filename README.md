@@ -73,20 +73,20 @@ deletes them at the end.
 
 | Section    | What it verifies |
 |------------|------------------|
-| discovery  | `/ServiceProviderConfig`, `/ResourceTypes` and `/Schemas` shape; every attribute definition against RFC 7643 §7; ResourceType ↔ Schema references; single-item and unknown lookups; 403 for filters |
-| auth       | 401 without credentials, with an invalid token, or with another scheme; `WWW-Authenticate` and RFC 6750 error codes |
-| errors     | 404 for GET/PUT/PATCH/DELETE of unknown resources; 400 for malformed JSON, missing required attributes, missing or unknown `schemas`, wrong types; 405 + `Allow`; `/Me`; 413; Error schema and `scimType` values |
-| users      | create/read/replace/delete, `Location` / `Content-Location` / `meta.*`, 409 `uniqueness` (case-insensitive), readOnly input ignored, case-insensitive attribute names, `application/json`, one primary value, PUT clearing omitted attributes |
+| discovery  | `/ServiceProviderConfig`, `/ResourceTypes` and `/Schemas` shape; required feature limits; authentication scheme types; every attribute definition against RFC 7643 §7; ResourceType ↔ Schema references; single-item and unknown lookups; 403 for filters |
+| auth       | TLS; 401 without credentials, with an invalid token, or with another scheme; `WWW-Authenticate` and RFC 6750 error codes |
+| errors     | 404 for GET/PUT/PATCH/DELETE of unknown resources; 400 for malformed JSON, missing required attributes, missing or unknown `schemas`, wrong types, binary values that are not base64; 405 + `Allow`; `/Me`; 413; Error schema and `scimType` values |
+| users      | create/read/replace/delete, `Location` / `Content-Location` / `meta.*`, 409 `uniqueness` on POST, PUT and PATCH (case-insensitive), reuse of a deleted userName, readOnly input ignored, case-insensitive attribute names, both `Accept` media types, `application/json` requests, one primary value, `null` and `[]` as unassigned, every published core attribute stored, PUT clearing omitted attributes |
 | extensions | the enterprise extension: storage, `schemas`, filtering, sorting, projection, PATCH by URN path, removal by PUT |
 | attributes | `attributes` / `excludedAttributes` on GET, list, POST, PUT and PATCH; sub-attributes, URN-qualified names, `returned: always / never` |
-| filter     | every operator (`eq ne co sw ew pr gt ge lt le`), `and`/`or`/`not`, precedence and grouping, value paths, sub-attribute and URN paths, booleans, dateTimes, `caseExact`, and six kinds of invalid filters |
+| filter     | every operator (`eq ne co sw ew pr gt ge lt le`), `and`/`or`/`not`, precedence and grouping, value paths, sub-attribute and URN paths, booleans, dateTimes with time zones, `null`, `caseExact`, and seven kinds of invalid filters |
 | search     | `POST /.search` with filter, attributes, paging and sorting; root queries |
-| pagination | `startIndex`, `count`, `itemsPerPage`, `totalResults`, out-of-range values, `maxResults`, a full page walk |
-| sort       | `sortBy` on attributes, sub-attributes, multi-valued attributes, URN names; `sortOrder`; sorting with paging |
-| patch      | add/replace/remove with and without paths, value filters and sub-attributes, multi-valued and primary rules, ordering, atomicity, and every error code |
+| pagination | `startIndex`, `count`, `itemsPerPage`, `totalResults`, required ListResponse attributes, out-of-range values, `maxResults` exceeded with throwaway Users, a full page walk |
+| sort       | `sortBy` on attributes, sub-attributes, multi-valued attributes by primary value, URN names; `sortOrder`; where resources without a value go; sorting with paging |
+| patch      | add/replace/remove with and without paths, value filters and sub-attributes, multi-valued and primary rules, no-op adds keeping `meta.lastModified`, ordering, atomicity, and every error code |
 | etag       | ETag syntax and stability, `meta.version`, `If-None-Match` 304, `If-Match` 412 on PUT/PATCH/DELETE, `If-Match: *` |
-| groups     | membership, member `type` and `$ref`, member filters, PATCH add/remove/replace members, immutable members, PUT, `User.groups`, referential integrity |
-| bulk       | bulkId references, `failOnErrors`, `maxOperations` → 413, or 501 when unsupported |
+| groups     | membership, member `type` and `$ref`, nested groups, member filters, PATCH add/remove/replace members, immutable members, PUT, `User.groups`, referential integrity |
+| bulk       | POST/PUT/PATCH/DELETE operations, bulkId and circular references, `failOnErrors` and error responses, `maxOperations` and `maxPayloadSize` → 413, or 501 when unsupported |
 
 ### Managing resources
 
@@ -242,8 +242,10 @@ _ = s.check(.must, "RFC7644 §3.3", res.location != null,
 `src/check.zig` holds this machinery. Each section is a `run(*Suite)`
 function in its own file under `src/checks/`, listed in the `Section` enum.
 Shared fixtures are created once, on demand, by `requireFixtures`: three
-users that sort alice < bob < carol by userName but bob < carol < alice by
-`name.givenName` and by primary email, so every `sortBy` is distinguishable. Every created resource is recorded and deleted
+users that sort alice < bob < carol by userName and by first email but
+bob < carol < alice by `name.givenName` and by primary email, so every
+`sortBy` is distinguishable. Their userNames start with
+`scimcheck-<run id>-fixture-`, which throwaway users must not reuse. Every created resource is recorded and deleted
 in reverse order at the end, so groups are deleted before their members.
 
 ### 4. Adding a check
