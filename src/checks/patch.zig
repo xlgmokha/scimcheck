@@ -188,6 +188,7 @@ fn errors(s: *Suite, path: []const u8) void {
         .{ "{\"op\":\"remove\",\"path\":\"userName\"}", null, "removing a required attribute returns 400", .should },
         .{ "{\"op\":\"add\",\"path\":\"displayName\"}", null, "add without a value returns 400", .should },
         .{ "{\"op\":\"replace\",\"path\":\"active\",\"value\":\"yes\"}", null, "a value of the wrong type returns 400", .should },
+        .{ "{\"op\":\"add\",\"path\":\"x509Certificates\",\"value\":[{\"value\":\"!!!not base64\"}]}", null, "a binary value that is not base64 returns 400", .should },
     };
     for (cases) |c| {
         if (s.send(.PATCH, path, .{ .body = s.patchJson(c[0]) })) |res| s.expectError(c[3], ref, res, .bad_request, c[1], c[2]);

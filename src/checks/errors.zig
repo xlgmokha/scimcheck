@@ -53,6 +53,11 @@ pub fn run(s: *Suite) void {
         s.expectError(.should, "RFC7643 §2.3", res, .bad_request, null, "POST a string where a boolean is defined returns 400");
         s.trackCreated(s.users_endpoint, res);
     }
+    const bad_binary = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"x509Certificates\":[{{\"value\":\"!!!not base64\"}}]}}", .{ urn.user, std.json.fmt(s.userName("badbinary"), .{}) });
+    if (s.send(.POST, s.users_endpoint, .{ .body = bad_binary })) |res| {
+        s.expectError(.should, "RFC7643 §2.3.6", res, .bad_request, null, "POST a binary value that is not base64 returns 400");
+        s.trackCreated(s.users_endpoint, res);
+    }
 
     if (s.send(.DELETE, s.users_endpoint, .{})) |res| {
         if (s.expectStatus(.should, "RFC9110 §15.5.6", res, .method_not_allowed, "DELETE on a collection returns 405")) {
