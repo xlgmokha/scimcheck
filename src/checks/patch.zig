@@ -119,13 +119,13 @@ fn multiValued(s: *Suite, path: []const u8, work_email: []const u8) void {
     }
 
     // RFC 7644 §3.5.2: setting primary on one value clears it on the others.
-    s.expectPatch("RFC7643 §2.4", path,
+    s.expectPatch("RFC7644 §3.5.2", path,
         \\{"op":"add","path":"emails","value":[{"value":"carol@primary.example.com","type":"other","primary":true}]}
     , "add a new primary value", null, null);
     if (s.fetch(ref, path)) |v| {
         const emails = j.array(j.field(v, "emails"));
         const new = j.findBy(emails, "value", "carol@primary.example.com");
-        _ = s.check(.must, "RFC7643 §2.4", check.primaryCount(emails) == 1 and j.boolean(j.field(new, "primary")) == true, "  the new value is the only primary", s.fmt("{f}", .{std.json.fmt(emails, .{})}));
+        _ = s.check(.must, "RFC7644 §3.5.2", check.primaryCount(emails) == 1 and j.boolean(j.field(new, "primary")) == true, "  the new value is the only primary", s.fmt("{f}", .{std.json.fmt(emails, .{})}));
     }
 
     s.expectPatch("RFC7644 §3.5.2.3", path,
