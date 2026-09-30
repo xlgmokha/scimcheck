@@ -116,7 +116,7 @@ fn patchMembers(s: *Suite, path: []const u8, f: [3]check.Fixture) void {
     // RFC 7643 §4.2: a member's value, $ref and type are immutable.
     const retarget = s.fmt("{{\"op\":\"replace\",\"path\":{f},\"value\":{f}}}", .{ std.json.fmt(s.fmt("members[value eq \"{s}\"].value", .{f[0].id}), .{}), std.json.fmt(f[1].id, .{}) });
     if (s.send(.PATCH, path, .{ .body = s.patchJson(retarget) })) |r| {
-        s.expectError(.should, "RFC7643 §4.2", r, .bad_request, "mutability", "changing an existing member's value returns 400 mutability");
+        s.expectError(.must, "RFC7644 §3.5.2", r, .bad_request, "mutability", "changing an existing member's value returns 400 mutability");
     }
 
     // Azure AD / Entra style: remove with a value array instead of a filter.

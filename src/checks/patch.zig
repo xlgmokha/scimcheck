@@ -182,6 +182,9 @@ fn semantics(s: *Suite, path: []const u8) void {
     , "op values in another case (Replace)", "displayName", "Case Insensitive Op");
 }
 
+/// RFC 7644 §3.5.2: a PatchOp MUST list its schema and one or more
+/// operations, and an operation that is not compatible with an attribute's
+/// mutability or schema SHALL return an error.
 fn errors(s: *Suite, path: []const u8) void {
     const ref = "RFC7644 §3.5.2";
     const Case = struct { []const u8, ?[]const u8, []const u8, check.Level };
@@ -189,21 +192,21 @@ fn errors(s: *Suite, path: []const u8) void {
         .{ "{\"op\":\"remove\"}", "noTarget", "remove without a path returns 400 noTarget", .must },
         .{ "{\"op\":\"bogus\",\"path\":\"displayName\",\"value\":\"x\"}", null, "an unknown op returns 400", .must },
         .{ "{\"op\":\"replace\",\"path\":\"emails[type eq]\",\"value\":\"x\"}", "invalidPath", "a malformed path returns 400 invalidPath", .must },
-        .{ "{\"op\":\"replace\",\"path\":\"id\",\"value\":\"new-id\"}", "mutability", "replacing a readOnly attribute (id) returns 400 mutability", .should },
-        .{ "{\"op\":\"add\",\"path\":\"groups\",\"value\":[{\"value\":\"g\"}]}", "mutability", "adding to a readOnly attribute (groups) returns 400 mutability", .should },
-        .{ "{\"op\":\"remove\",\"path\":\"userName\"}", null, "removing a required attribute returns 400", .should },
-        .{ "{\"op\":\"add\",\"path\":\"displayName\"}", null, "add without a value returns 400", .should },
-        .{ "{\"op\":\"replace\",\"path\":\"active\",\"value\":\"yes\"}", null, "a value of the wrong type returns 400", .should },
-        .{ "{\"op\":\"add\",\"path\":\"x509Certificates\",\"value\":[{\"value\":\"!!!not base64\"}]}", null, "a binary value that is not base64 returns 400", .should },
+        .{ "{\"op\":\"replace\",\"path\":\"id\",\"value\":\"new-id\"}", "mutability", "replacing a readOnly attribute (id) returns 400 mutability", .must },
+        .{ "{\"op\":\"add\",\"path\":\"groups\",\"value\":[{\"value\":\"g\"}]}", "mutability", "adding to a readOnly attribute (groups) returns 400 mutability", .must },
+        .{ "{\"op\":\"remove\",\"path\":\"userName\"}", null, "removing a required attribute returns 400", .must },
+        .{ "{\"op\":\"add\",\"path\":\"displayName\"}", null, "add without a value returns 400", .must },
+        .{ "{\"op\":\"replace\",\"path\":\"active\",\"value\":\"yes\"}", null, "a value of the wrong type returns 400", .must },
+        .{ "{\"op\":\"add\",\"path\":\"x509Certificates\",\"value\":[{\"value\":\"!!!not base64\"}]}", null, "a binary value that is not base64 returns 400", .must },
     };
     for (cases) |c| {
         if (s.send(.PATCH, path, .{ .body = s.patchJson(c[0]) })) |res| s.expectError(c[3], ref, res, .bad_request, c[1], c[2]);
     }
     if (s.send(.PATCH, path, .{ .body = "{\"Operations\":[{\"op\":\"replace\",\"path\":\"displayName\",\"value\":\"x\"}]}" })) |res| {
-        _ = s.expectStatus(.should, ref, res, .bad_request, "a PatchOp without schemas returns 400");
+        _ = s.expectStatus(.must, ref, res, .bad_request, "a PatchOp without schemas returns 400");
     }
     if (s.send(.PATCH, path, .{ .body = s.patchJson("") })) |res| {
-        _ = s.expectStatus(.should, ref, res, .bad_request, "a PatchOp with no Operations returns 400");
+        _ = s.expectStatus(.must, ref, res, .bad_request, "a PatchOp with no Operations returns 400");
     }
     if (s.send(.PATCH, path, .{ .body = "{\"schemas\": [" })) |res| {
         s.expectError(.must, "RFC7644 §3.12", res, .bad_request, "invalidSyntax", "malformed PATCH JSON returns 400 invalidSyntax");
