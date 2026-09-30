@@ -45,10 +45,12 @@ pub fn run(s: *Suite) void {
     }
 
     // Walking the pages one at a time visits every fixture exactly once.
+    // Without sorting the walk relies on the server's natural order being stable.
+    const sort = if (s.caps.sort) "&sortBy=userName" else "";
     var seen: std.StringHashMapUnmanaged(void) = .empty;
     var start: usize = 1;
     while (start <= 3) : (start += 1) {
-        const res = s.send(.GET, s.fmt("{s}&sortBy=userName&startIndex={d}&count=1", .{ base, start }), .{}) orelse return;
+        const res = s.send(.GET, s.fmt("{s}{s}&startIndex={d}&count=1", .{ base, sort, start }), .{}) orelse return;
         const body = s.json(res);
         if (check.firstResource(body)) |r| if (j.string(j.field(r, "id"))) |id| {
             seen.put(s.arena, id, {}) catch {};
