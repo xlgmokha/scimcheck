@@ -48,6 +48,29 @@ pub fn run(s: *Suite) void {
         s.expectError(.must, "RFC7643 §3", res, .bad_request, null, "POST a resource with an unknown schema URN returns 400");
         s.trackCreated(s.users_endpoint, res);
     }
+    const duplicate_schema = s.fmt("{{\"schemas\":[\"{s}\",\"{s}\"],\"userName\":{f}}}", .{ urn.user, urn.user, std.json.fmt(s.userName("dupschema"), .{}) });
+    if (s.send(.POST, s.users_endpoint, .{ .body = duplicate_schema })) |res| {
+        s.expectError(.must, "RFC7643 §3", res, .bad_request, null, "POST a resource with a duplicated schemas value returns 400");
+        s.trackCreated(s.users_endpoint, res);
+    }
+    // RFC 7643 §3: "Value order is not specified and MUST NOT impact
+    // behavior." Only meaningful with two schemas to reorder.
+    if (s.enterprise_user) {
+        const extra = "{\"employeeNumber\":\"1\"}";
+        const forward = s.fmt("{{\"schemas\":[\"{s}\",\"{s}\"],\"userName\":{f},\"{s}\":{s}}}", .{ urn.user, urn.enterprise_user, std.json.fmt(s.userName("order-fwd"), .{}), urn.enterprise_user, extra });
+        const reversed = s.fmt("{{\"schemas\":[\"{s}\",\"{s}\"],\"userName\":{f},\"{s}\":{s}}}", .{ urn.enterprise_user, urn.user, std.json.fmt(s.userName("order-rev"), .{}), urn.enterprise_user, extra });
+        var forward_status: ?std.http.Status = null;
+        if (s.send(.POST, s.users_endpoint, .{ .body = forward })) |res| {
+            forward_status = res.status;
+            s.trackCreated(s.users_endpoint, res);
+        }
+        if (forward_status) |want| {
+            if (s.send(.POST, s.users_endpoint, .{ .body = reversed })) |res| {
+                s.trackCreated(s.users_endpoint, res);
+                _ = s.check(.must, "RFC7643 §3", res.status == want, "schemas array order does not affect acceptance", s.fmt("forward order: HTTP {d}, reversed order: HTTP {d}", .{ @intFromEnum(want), @intFromEnum(res.status) }));
+            }
+        }
+    }
     const wrong_type = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"active\":\"yes\"}}", .{ urn.user, std.json.fmt(s.userName("wrongtype"), .{}) });
     if (s.send(.POST, s.users_endpoint, .{ .body = wrong_type })) |res| {
         s.expectError(.must, "RFC7643 §2.3", res, .bad_request, null, "POST a string where a boolean is defined returns 400");
