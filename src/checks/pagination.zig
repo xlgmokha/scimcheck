@@ -72,7 +72,7 @@ const max_fillers = 100;
 fn maxResults(s: *Suite, max: i64) void {
     if (max < 1) return;
     const target = s.fmt("{s}?attributes=id&count={d}", .{ s.users_endpoint, max + 1 });
-    var body = page(s, target, "", "count above filter.maxResults") orelse return;
+    var body = pageOrTooMany(s, target, "count above filter.maxResults") orelse return;
     const total = j.integer(j.field(body, "totalResults")) orelse return;
     var fillers: std.ArrayList([]const u8) = .empty;
     defer for (fillers.items) |path| {
@@ -88,7 +88,7 @@ fn maxResults(s: *Suite, max: i64) void {
             const filler = s.createUser(.{ .user_name = s.userName(s.fmt("page-{d}", .{i})) }) orelse return;
             fillers.append(s.arena, filler.path) catch {};
         }
-        body = page(s, target, "", "count above filter.maxResults with more Users than the limit") orelse return;
+        body = pageOrTooMany(s, target, "count above filter.maxResults with more Users than the limit") orelse return;
     }
     const per_page = j.integer(j.field(body, "itemsPerPage")) orelse @as(i64, @intCast(check.resourceCount(body)));
     _ = s.check(.must, "RFC7643 §5", per_page <= max and check.resourceCount(body) <= max, "  no more than maxResults are returned", s.fmt("maxResults is {d}, got {d} resources", .{ max, check.resourceCount(body) }));
@@ -96,5 +96,19 @@ fn maxResults(s: *Suite, max: i64) void {
 
 fn page(s: *Suite, base: []const u8, query: []const u8, what: []const u8) ?std.json.Value {
     const res = s.send(.GET, s.fmt("{s}{s}", .{ base, query }), .{}) orelse return null;
+    return s.expectList("RFC7644 §3.4.2.4", res, s.fmt("{s} returns a ListResponse", .{what}));
+}
+
+/// RFC 7644 §3.4.2.1: when too many results would be returned, a service
+/// provider SHALL either reject the request with 400 `tooMany`, or (as
+/// `page` checks elsewhere) cap the page at `filter.maxResults`. Returns the
+/// ListResponse body when the server capped the page, or null when it
+/// rejected the request (already checked) or on any other failure.
+fn pageOrTooMany(s: *Suite, target: []const u8, what: []const u8) ?std.json.Value {
+    const res = s.send(.GET, target, .{}) orelse return null;
+    if (res.status == .bad_request) {
+        s.expectError(.must, "RFC7644 §3.4.2.1", res, .bad_request, "tooMany", s.fmt("{s} returns 400 tooMany or a capped ListResponse", .{what}));
+        return null;
+    }
     return s.expectList("RFC7644 §3.4.2.4", res, s.fmt("{s} returns a ListResponse", .{what}));
 }
