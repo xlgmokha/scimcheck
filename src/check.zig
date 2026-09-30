@@ -159,6 +159,8 @@ pub const Suite = struct {
     groups_endpoint: ?[]const u8 = "/Groups",
     /// The User resource type lists the enterprise extension.
     enterprise_user: bool = false,
+    /// The core User schema as published in `/Schemas`, when it is.
+    user_schema: ?Value = null,
     run_id: []const u8 = "",
     /// Resources created by the run, deleted at the end unless `keep` is set.
     created: std.ArrayList([]const u8) = .empty,

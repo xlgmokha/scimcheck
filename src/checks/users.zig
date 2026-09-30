@@ -51,6 +51,7 @@ pub fn run(s: *Suite) void {
     requestFormat(s);
     primary(s);
     unassigned(s);
+    everyAttribute(s);
 
     if (s.send(.GET, path, .{})) |got| {
         if (s.expectStatus(.must, "RFC7644 §3.4.1", got, .ok, "GET /Users/{id} returns 200")) {
@@ -145,6 +146,60 @@ fn requestFormat(s: *Suite) void {
     if (s.send(.POST, s.users_endpoint, .{ .body = plain, .content_type = "application/json" })) |res| {
         s.trackCreated(s.users_endpoint, res);
         _ = s.expectStatus(.should, "RFC7644 §8.1", res, .created, "requests with Content-Type application/json are accepted");
+    }
+}
+
+/// A value for every core User attribute (RFC 7643 §4.1), shaped like the
+/// full representation in RFC 7643 §8.2.
+const full_user = [_]struct { []const u8, []const u8 }{
+    .{ "name", "{\"formatted\":\"Ms. Barbara J Jensen III\",\"familyName\":\"Jensen\",\"givenName\":\"Barbara\",\"middleName\":\"Jane\",\"honorificPrefix\":\"Ms.\",\"honorificSuffix\":\"III\"}" },
+    .{ "displayName", "\"Babs Jensen\"" },
+    .{ "nickName", "\"Babs\"" },
+    .{ "profileUrl", "\"https://login.example.com/bjensen\"" },
+    .{ "title", "\"Tour Guide\"" },
+    .{ "userType", "\"Employee\"" },
+    .{ "preferredLanguage", "\"en-US\"" },
+    .{ "locale", "\"en-US\"" },
+    .{ "timezone", "\"America/Los_Angeles\"" },
+    .{ "active", "true" },
+    .{ "emails", "[{\"value\":\"bjensen@example.com\",\"type\":\"work\",\"primary\":true}]" },
+    .{ "phoneNumbers", "[{\"value\":\"555-555-5555\",\"type\":\"work\"}]" },
+    .{ "ims", "[{\"value\":\"someaimhandle\",\"type\":\"aim\"}]" },
+    .{ "photos", "[{\"value\":\"https://photos.example.com/profilephoto/72930000000Ccne/F\",\"type\":\"photo\"}]" },
+    .{ "addresses", "[{\"type\":\"work\",\"streetAddress\":\"100 Universal City Plaza\",\"locality\":\"Hollywood\",\"region\":\"CA\",\"postalCode\":\"91608\",\"country\":\"US\",\"formatted\":\"100 Universal City Plaza\\nHollywood, CA 91608 USA\",\"primary\":true}]" },
+    .{ "entitlements", "[{\"value\":\"scimcheck entitlement\"}]" },
+    .{ "roles", "[{\"value\":\"scimcheck role\"}]" },
+    .{ "x509Certificates", "[{\"value\":\"MIIDQzCCAqygAwIBAgICEAAwDQYJKoZIhvcNAQEFBQAw\"}]" },
+};
+
+/// RFC 7643 §7: an attribute the User schema declares as writable and
+/// "returned": "default" is stored and returned. Only attributes the
+/// service provider publishes are sent.
+fn everyAttribute(s: *Suite) void {
+    const ref = "RFC7643 §7";
+    const attributes = j.array(j.field(s.user_schema, "attributes")) orelse return s.skip("the User schema is not published, so its attributes are unknown");
+    var members: std.ArrayList(u8) = .empty;
+    var sent: std.ArrayList([]const u8) = .empty;
+    for (full_user) |entry| {
+        const name, const value = entry;
+        const definition = j.findBy(attributes, "name", name) orelse continue;
+        const mutability = j.string(j.field(definition, "mutability")) orelse "readWrite";
+        const returned = j.string(j.field(definition, "returned")) orelse "default";
+        if (!(eql(mutability, "readWrite") or eql(mutability, "immutable"))) continue;
+        if (!(eql(returned, "default") or eql(returned, "always"))) continue;
+        members.print(s.arena, ",\"{s}\":{s}", .{ name, value }) catch {};
+        sent.append(s.arena, name) catch {};
+    }
+    if (sent.items.len == 0) return s.skip("the User schema declares none of the RFC 7643 §4.1 attributes as writable and returned");
+    const body = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f}{s}}}", .{ urn.user, std.json.fmt(s.userName("everything"), .{}), members.items });
+    const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (!s.expectStatus(.must, "RFC7644 §3.3", res, .created, "POST a User with every published core attribute returns 201")) return;
+    const id = j.string(j.field(s.json(res), "id")) orelse return;
+    const got = s.fetch("RFC7644 §3.4.1", s.fmt("{s}/{s}", .{ s.users_endpoint, id })) orelse return;
+    for (sent.items) |name| {
+        const v = j.field(got, name);
+        _ = s.check(.must, ref, v != null and v.? != .null, s.fmt("  {s} is stored and returned", .{name}), s.fmt("{f}", .{std.json.fmt(got, .{})}));
     }
 }
 

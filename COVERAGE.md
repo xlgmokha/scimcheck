@@ -53,7 +53,7 @@ or configuration a client cannot see.
 | 3 | Resources and `schemas` | users, errors, extensions | `schemas` required and known; extension URNs listed |
 | 3.1 | Common attributes | users, filter | `id` assigned by the server and caseExact; `externalId` caseExact; `meta.resourceType/created/lastModified/location/version`; `Content-Location` |
 | 3.3 | Extensions | extensions | storage, retrieval, filtering, sorting, projection, PATCH, removal |
-| 4.1 | User | users, patch, filter | `userName`, `name`, `displayName`, `nickName`, `title`, `profileUrl`, `emails`, `phoneNumbers`, `active`, `password`, `groups`. **Partial:** `addresses`, `ims`, `photos`, `entitlements`, `roles` and `x509Certificates` are not exercised individually. |
+| 4.1 | User | users, patch, filter | `userName`, `name`, `displayName`, `nickName`, `title`, `profileUrl`, `emails`, `phoneNumbers`, `active`, `password`, `groups`; every other §4.1 attribute the User schema publishes as writable is stored and returned |
 | 4.2 | Group | groups, discovery | `displayName` required; members' `value`, `type` and `$ref`; membership changes |
 | 4.3 | Enterprise User | extensions | `employeeNumber`, `department`, `costCenter`, `manager.value`, readOnly `manager.displayName` |
 | 5 | ServiceProviderConfig | discovery | every feature flag, `maxResults`, bulk limits, authentication schemes |

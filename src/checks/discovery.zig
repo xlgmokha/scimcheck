@@ -173,6 +173,7 @@ fn crossReference(s: *Suite, types: []const Value, schemas: []const Value) void 
 
     // The core User schema as defined in RFC 7643 §4.1 / §8.7.1.
     if (j.findBy(schemas, "id", urn.user)) |user| {
+        s.user_schema = user;
         const attrs = j.array(j.field(user, "attributes"));
         const user_name = j.findBy(attrs, "name", "userName");
         _ = s.check(.should, "RFC7643 §8.7.1", j.boolean(j.field(user_name, "required")) == true and eql(j.string(j.field(user_name, "uniqueness")), "server"), "User.userName is required with server uniqueness", null);
