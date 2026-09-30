@@ -13,6 +13,12 @@ pub fn run(s: *Suite) void {
 
     if (page(s, base, "", "no paging parameters")) |body| {
         _ = s.check(.must, ref, check.resourceCount(body) == 3, "  every result is returned", null);
+        var identified = true;
+        for (j.array(j.field(body, "Resources")) orelse &.{}) |r| {
+            const id = j.string(j.field(r, "id")) orelse "";
+            identified = identified and id.len > 0 and j.hasSchema(r, check.urn.user);
+        }
+        _ = s.check(.must, "RFC7643 §3", identified, "  each listed resource has an id and lists the User schema", null);
         _ = s.check(.must, ref, j.integer(j.field(body, "startIndex")) == 1, "  startIndex defaults to 1", null);
     }
     if (page(s, base, "&count=1", "count=1")) |body| {
