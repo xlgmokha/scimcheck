@@ -76,7 +76,7 @@ pub fn run(s: *Suite) void {
         s.expectError(.must, "RFC7644 §3.6", gone, .not_found, null, "GET a deleted User returns 404");
     }
     if (s.send(.DELETE, path, .{})) |again| {
-        s.expectError(.should, "RFC7644 §3.6", again, .not_found, null, "DELETE a deleted User returns 404");
+        s.expectError(.must, "RFC7644 §3.6", again, .not_found, null, "DELETE a deleted User returns 404");
     }
     if (s.caps.filter) {
         s.expectCount("RFC7644 §3.6", .must, s.fmt("userName eq \"{s}\"", .{user_name}), 0, "a deleted User is omitted from queries");
