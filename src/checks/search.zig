@@ -13,6 +13,7 @@ pub fn run(s: *Suite) void {
     const f = s.requireFixtures() orelse return;
     const search = s.fmt("{s}/.search", .{s.users_endpoint});
     const anchor = s.fmt("userName sw \"{s}\"", .{s.fixturePrefix()});
+    unknownParams(s, f);
 
     const first = s.send(.POST, search, .{ .body = request(s, s.fmt("\"filter\":{f}", .{std.json.fmt(s.fmt("userName eq \"{s}\"", .{f[1].user_name}), .{})})) }) orelse return;
     // RFC 7644 §3.4.3 makes POST queries optional ("Clients MAY"); once
@@ -71,6 +72,26 @@ pub fn run(s: *Suite) void {
         if (s.expectStatus(.may, "RFC7644 §3.4.2.1", res, .ok, "GET /?filter= at the root is supported")) {
             _ = s.expectList("RFC7644 §3.4.2.1", res, "root query returns a ListResponse");
         }
+    }
+}
+
+/// RFC 7644 §3.4.2: service providers "SHOULD ignore any query parameters
+/// they do not recognize instead of rejecting the query".
+fn unknownParams(s: *Suite, f: [3]check.Fixture) void {
+    const ref = "RFC7644 §3.4.2";
+    if (s.caps.filter) {
+        const filter = s.escape(s.fmt("userName sw \"{s}\"", .{s.fixturePrefix()}));
+        if (s.send(.GET, s.fmt("{s}?filter={s}&scimcheck_unknown=1", .{ s.users_endpoint, filter }), .{})) |res| {
+            if (s.expectStatus(.should, ref, res, .ok, "an unknown query parameter is ignored on a filtered query")) {
+                _ = s.check(.should, ref, j.integer(j.field(s.json(res), "totalResults")) == 3, "  the filter is still applied", res.body);
+            }
+        }
+    }
+    if (s.send(.GET, s.fmt("{s}?count=1&scimcheck_unknown=1", .{s.users_endpoint}), .{})) |res| {
+        _ = s.expectStatus(.should, ref, res, .ok, "an unknown query parameter is ignored on a paged query");
+    }
+    if (s.send(.GET, s.fmt("{s}?scimcheck_unknown=1", .{f[0].path}), .{})) |res| {
+        _ = s.expectStatus(.should, ref, res, .ok, "an unknown query parameter is ignored when retrieving a resource");
     }
 }
 

@@ -10,7 +10,10 @@ const Suite = check.Suite;
 const eql = check.eql;
 
 pub fn run(s: *Suite) void {
-    if (!s.caps.patch) return s.skip("patch.supported is false");
+    if (!s.caps.patch) {
+        s.skip("patch.supported is false");
+        return unsupported(s);
+    }
     const f = s.requireFixtures() orelse return;
     const path = f[2].path;
     replace(s, path);
@@ -19,6 +22,19 @@ pub fn run(s: *Suite) void {
     remove(s, path);
     semantics(s, path);
     errors(s, path);
+}
+
+/// PATCH is OPTIONAL (RFC 7644 §3.5.2). A service provider without it
+/// should answer 501 (RFC 7644 §3.12, Table 8).
+fn unsupported(s: *Suite) void {
+    const user = s.createUser(.{ .user_name = s.userName("no-patch") }) orelse return;
+    const res = s.send(.PATCH, user.path, .{ .body = s.patchJson("{\"op\":\"replace\",\"path\":\"displayName\",\"value\":\"x\"}") }) orelse return;
+    if (res.status == .ok or res.status == .no_content) {
+        // Supporting more than it advertises is not a violation.
+        _ = s.check(.may, "RFC7644 §3.5.2", false, "PATCH is accepted although patch.supported is false", null);
+        return;
+    }
+    s.expectError(.should, "RFC7644 §3.12", res, .not_implemented, null, "PATCH returns 501 when patch.supported is false");
 }
 
 fn replace(s: *Suite, path: []const u8) void {

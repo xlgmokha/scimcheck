@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const check = @import("../check.zig");
+const Client = @import("../Client.zig");
 const j = @import("../json.zig");
 const Suite = check.Suite;
 const urn = check.urn;
@@ -45,6 +46,9 @@ pub fn run(s: *Suite) void {
 
     if (user_location) |loc| modify(s, loc);
     if (s.groups_endpoint) |endpoint| circular(s, endpoint);
+    bulkIds(s);
+    failedDelete(s);
+    if (s.caps.etag) versions(s);
 
     // failOnErrors=1 stops processing after the first error.
     const failing = s.fmt(
@@ -72,6 +76,7 @@ pub fn run(s: *Suite) void {
             const huge = s.fmt("{{\"schemas\":[\"{s}\"],\"Operations\":[{{\"method\":\"POST\",\"path\":{f},\"bulkId\":\"huge\",\"data\":{s}}}]}}", .{ urn.bulk_request, std.json.fmt(s.users_endpoint, .{}), data });
             if (s.send(.POST, "/Bulk", .{ .body = huge })) |r| {
                 s.expectError(.must, "RFC7644 §3.7.4", r, .payload_too_large, null, "a request larger than maxPayloadSize returns 413");
+                namesLimit(s, r, max, "maxPayloadSize");
                 if (r.status == .ok) {
                     const results = j.array(j.field(s.json(r), "Operations")) orelse &.{};
                     if (j.string(j.field(j.findBy(results, "bulkId", "huge"), "location"))) |loc| s.created.append(s.arena, loc) catch {};
@@ -92,6 +97,7 @@ pub fn run(s: *Suite) void {
             const too_many = s.fmt("{{\"schemas\":[\"{s}\"],\"Operations\":[{s}]}}", .{ urn.bulk_request, ops_list.items });
             if (s.send(.POST, "/Bulk", .{ .body = too_many })) |r| {
                 s.expectError(.must, ref, r, .payload_too_large, null, "more than maxOperations returns 413");
+                namesLimit(s, r, max, "maxOperations");
             }
         }
     }
@@ -168,4 +174,98 @@ fn circular(s: *Suite, endpoint: []const u8) void {
         resolved = resolved and value.len > 0 and std.mem.endsWith(u8, other_location, value);
     }
     _ = s.check(.must, ref, resolved or conflict, "  each Group references the other's new id, or the conflict is reported as 409", res.body);
+}
+
+const Outcome = struct { res: Client.Response, ops: []const std.json.Value };
+
+/// Sends a BulkRequest made of `operations` (JSON objects separated by
+/// commas) and records every resource it created for cleanup.
+fn post(s: *Suite, operations: []const u8) ?Outcome {
+    const body = s.fmt("{{\"schemas\":[\"{s}\"],\"Operations\":[{s}]}}", .{ urn.bulk_request, operations });
+    const res = s.send(.POST, "/Bulk", .{ .body = body }) orelse return null;
+    const ops = j.array(j.field(s.json(res), "Operations")) orelse &.{};
+    for (ops) |op| {
+        if (eql(j.string(j.field(op, "status")), "201")) {
+            if (j.string(j.field(op, "location"))) |loc| s.created.append(s.arena, loc) catch {};
+        }
+    }
+    return .{ .res = res, .ops = ops };
+}
+
+fn createOp(s: *Suite, bulk_id: ?[]const u8, user_name: []const u8) []const u8 {
+    const id = if (bulk_id) |b| s.fmt("\"bulkId\":{f},", .{std.json.fmt(b, .{})}) else "";
+    return s.fmt("{{\"method\":\"POST\",\"path\":{f},{s}\"data\":{s}}}", .{ std.json.fmt(s.users_endpoint, .{}), id, s.userJson(.{ .user_name = user_name }) });
+}
+
+/// True when the whole request or operation `op` was rejected.
+fn rejected(res: Client.Response, op: ?std.json.Value) bool {
+    if (res.status == .bad_request) return true;
+    if (res.status != .ok) return false;
+    const status = j.string(j.field(op, "status")) orelse return false;
+    return status.len > 0 and status[0] != '2';
+}
+
+/// RFC 7644 §3.7: "bulkId" is REQUIRED when the method is POST and is
+/// unique within a bulk request.
+fn bulkIds(s: *Suite) void {
+    const ref = "RFC7644 §3.7";
+    if (post(s, createOp(s, null, s.userName("bulk-no-id")))) |o| {
+        _ = s.check(.must, ref, rejected(o.res, if (o.ops.len > 0) o.ops[0] else null), "a POST operation without a bulkId is rejected", o.res.body);
+    }
+    const dup = s.fmt("{s},{s}", .{ createOp(s, "dup", s.userName("bulk-dup-a")), createOp(s, "dup", s.userName("bulk-dup-b")) });
+    if (post(s, dup)) |o| {
+        var failed = o.res.status == .bad_request;
+        for (o.ops) |op| failed = failed or rejected(o.res, op);
+        _ = s.check(.should, ref, failed, "two operations with the same bulkId are rejected", o.res.body);
+    }
+}
+
+/// RFC 7644 §3.7.3: "location" MUST be returned for every operation except
+/// a failed POST, and an error status comes with the Error response.
+fn failedDelete(s: *Suite) void {
+    const ref = "RFC7644 §3.7.3";
+    const op = s.fmt("{{\"method\":\"DELETE\",\"path\":\"{s}/scimcheck-missing-bulk\"}}", .{s.users_endpoint});
+    const o = post(s, op) orelse return;
+    if (!s.expectStatus(.must, "RFC7644 §3.7", o.res, .ok, "POST /Bulk with a DELETE of an unknown User returns 200")) return;
+    const result = if (o.ops.len > 0) o.ops[0] else null;
+    _ = s.check(.must, ref, eql(j.string(j.field(result, "status")), "404"), "  the operation reports status \"404\"", o.res.body);
+    _ = s.check(.must, ref, j.string(j.field(result, "location")) != null, "  a failed DELETE still reports its location", o.res.body);
+    _ = s.check(.must, ref, j.hasSchema(j.field(result, "response"), urn.@"error"), "  the operation includes its error response", o.res.body);
+}
+
+/// RFC 7644 §3.7: an operation "version" is used with entity-tags. A
+/// mismatch is a 412 or 409 (RFC 7644 §3.12, Table 8).
+fn versions(s: *Suite) void {
+    const ref = "RFC7644 §3.7";
+    const user = s.createUser(.{ .user_name = s.userName("bulk-version") }) orelse return;
+    const current = s.send(.GET, user.path, .{}) orelse return;
+    const etag = current.etag orelse return;
+    const patch = struct {
+        fn op(suite: *Suite, path: []const u8, version: []const u8, name: []const u8) []const u8 {
+            return suite.fmt("{{\"method\":\"PATCH\",\"path\":{f},\"version\":{f},\"data\":{s}}}", .{
+                std.json.fmt(path, .{}),
+                std.json.fmt(version, .{}),
+                suite.patchJson(suite.fmt("{{\"op\":\"replace\",\"path\":\"displayName\",\"value\":{f}}}", .{std.json.fmt(name, .{})})),
+            });
+        }
+    }.op;
+    if (post(s, patch(s, user.path, "W/\"scimcheck-stale\"", "Stale"))) |o| {
+        const status = j.string(j.field(if (o.ops.len > 0) o.ops[0] else null, "status"));
+        _ = s.check(.should, ref, eql(status, "412") or eql(status, "409"), "an operation with a stale version is rejected", o.res.body);
+        if (s.fetch(ref, user.path)) |after| {
+            _ = s.check(.should, ref, !eql(j.string(j.field(after, "displayName")), "Stale"), "  the resource is unchanged", null);
+        }
+    }
+    if (post(s, patch(s, user.path, etag, "Current"))) |o| {
+        const status = j.string(j.field(if (o.ops.len > 0) o.ops[0] else null, "status"));
+        _ = s.check(.should, ref, eql(status, "200") or eql(status, "204"), "an operation with the current version succeeds", o.res.body);
+    }
+}
+
+/// RFC 7644 §3.7.4: the 413 response "MUST specify the limit exceeded in
+/// the body". Servers word this freely, so accept the number or its name.
+fn namesLimit(s: *Suite, res: Client.Response, max: i64, name: []const u8) void {
+    if (res.status != .payload_too_large) return;
+    const named = std.mem.find(u8, res.body, name) != null or std.mem.find(u8, res.body, s.fmt("{d}", .{max})) != null;
+    _ = s.check(.should, "RFC7644 §3.7.4", named, s.fmt("  the 413 response names the {s} limit", .{name}), res.body);
 }

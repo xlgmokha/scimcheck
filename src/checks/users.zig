@@ -49,6 +49,7 @@ pub fn run(s: *Suite) void {
     uniqueness(s, user_name);
     readOnlyInput(s);
     requestFormat(s);
+    utf8(s);
     primary(s);
     unassigned(s);
     everyAttribute(s);
@@ -151,6 +152,48 @@ fn requestFormat(s: *Suite) void {
     if (s.send(.POST, s.users_endpoint, .{ .body = plain, .content_type = "application/json" })) |res| {
         s.trackCreated(s.users_endpoint, res);
         _ = s.expectStatus(.should, "RFC7644 §8.1", res, .created, "requests with Content-Type application/json are accepted");
+    }
+}
+
+/// RFC 7644 §3.8: servers "MUST accept requests and be able to return
+/// JSON-structured responses using UTF-8 encoding". The text below covers
+/// 2-, 3- and 4-byte sequences. It stays out of userName, which servers may
+/// restrict or case-fold (RFC 7644 §7.8).
+fn utf8(s: *Suite) void {
+    const ref = "RFC7644 §3.8";
+    const text = "Zoë Łukasz 日本語 🙂";
+    const res = s.send(.POST, s.users_endpoint, .{ .body = s.userJson(.{ .user_name = s.userName("utf8"), .display_name = text, .given_name = text }) }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (s.expectStatus(.must, ref, res, .created, "POST a User with non-ASCII values returns 201")) {
+        _ = s.check(.must, ref, std.unicode.utf8ValidateSlice(res.body), "  the response is valid UTF-8", null);
+        const body = s.json(res);
+        _ = s.check(.must, ref, eql(j.string(j.field(body, "displayName")), text) and eql(j.string(j.path(body, "name.givenName")), text), "  non-ASCII values are returned unchanged", res.body);
+        if (j.string(j.field(body, "id"))) |id| {
+            if (s.fetch(ref, s.fmt("{s}/{s}", .{ s.users_endpoint, id }))) |got| {
+                _ = s.check(.must, ref, eql(j.string(j.field(got, "displayName")), text), "  non-ASCII values are stored unchanged", null);
+            }
+        }
+        // The charset parameter is optional, but when present it must be UTF-8.
+        if (res.content_type) |ct| if (std.ascii.findIgnoreCase(ct, "charset=")) |i| {
+            const value = std.mem.trim(u8, ct[i + "charset=".len ..], " \"");
+            const end = std.mem.findScalar(u8, value, ';') orelse value.len;
+            _ = s.check(.must, ref, std.ascii.eqlIgnoreCase(std.mem.trim(u8, value[0..end], "\" "), "utf-8"), "  a declared charset is UTF-8", ct);
+        };
+    }
+
+    // JSON \u escapes, including a surrogate pair, decode to the same UTF-8.
+    const escaped = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"displayName\":\"Zo\\u00eb \\ud83d\\ude42\"}}", .{ urn.user, std.json.fmt(s.userName("utf8-escaped"), .{}) });
+    if (s.send(.POST, s.users_endpoint, .{ .body = escaped })) |r| {
+        s.trackCreated(s.users_endpoint, r);
+        if (s.expectStatus(.must, ref, r, .created, "POST a User with \\u escapes returns 201")) {
+            _ = s.check(.must, ref, eql(j.string(j.field(s.json(r), "displayName")), "Zoë 🙂"), "  the escapes are decoded", r.body);
+        }
+    }
+
+    const declared = s.userJson(.{ .user_name = s.userName("utf8-charset") });
+    if (s.send(.POST, s.users_endpoint, .{ .body = declared, .content_type = Client.media_type ++ "; charset=utf-8" })) |r| {
+        s.trackCreated(s.users_endpoint, r);
+        _ = s.expectStatus(.should, ref, r, .created, "a request with Content-Type charset=utf-8 is accepted");
     }
 }
 

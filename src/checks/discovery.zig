@@ -23,6 +23,64 @@ pub fn run(s: *Suite) void {
     if (s.send(.GET, "/Schemas?filter=id%20pr", .{})) |res| {
         s.expectError(.should, "RFC7644 §4", res, .forbidden, null, "filtering /Schemas returns 403");
     }
+    ignoresQueryParams(s, "/ResourceTypes", "name");
+    ignoresQueryParams(s, "/Schemas", "id");
+}
+
+/// RFC 7644 §4: the query parameters of §3.4.2 "such as filtering, sorting,
+/// and pagination, SHALL be ignored" on the discovery endpoints. Only
+/// `filter` may draw a 403, which is checked above.
+fn ignoresQueryParams(s: *Suite, endpoint: []const u8, sort_by: []const u8) void {
+    const ref = "RFC7644 §4";
+    const first = s.send(.GET, endpoint, .{}) orelse return;
+    const second = s.send(.GET, endpoint, .{}) orelse return;
+    // A failing plain GET is already reported by the checks above.
+    if (first.status != .ok or second.status != .ok) return;
+    const base = keys(s, first) orelse return;
+    const again = keys(s, second) orelse return;
+    const total = j.integer(j.field(s.json(first), "totalResults"));
+    // Some servers list these in a random order; only compare order when
+    // two plain requests agree.
+    const stable = std.mem.eql(u8, joined(s, base), joined(s, again));
+
+    for ([_][]const u8{ "ascending", "descending" }) |order| {
+        const what = s.fmt("{s} ignores startIndex, count, sortBy and sortOrder={s}", .{ endpoint, order });
+        const res = s.send(.GET, s.fmt("{s}?startIndex=2&count=1&sortBy={s}&sortOrder={s}", .{ endpoint, sort_by, order }), .{}) orelse continue;
+        if (!s.expectStatus(.must, ref, res, .ok, what)) continue;
+        const got = keys(s, res) orelse {
+            _ = s.check(.must, ref, false, s.fmt("  {s} still returns a ListResponse", .{endpoint}), res.body);
+            continue;
+        };
+        _ = s.check(.must, ref, j.integer(j.field(s.json(res), "totalResults")) == total and got.len == base.len, "  every resource is returned", s.fmt("expected {d} resources, got {d}", .{ base.len, got.len }));
+        _ = s.check(.must, ref, std.mem.eql(u8, joined(s, sorted(s, got)), joined(s, sorted(s, base))), "  the same resources are returned", joined(s, got));
+        if (stable and base.len > 1) {
+            _ = s.check(.must, ref, std.mem.eql(u8, joined(s, got), joined(s, base)), "  the order is not changed", joined(s, got));
+        }
+    }
+}
+
+/// The id (or name) of each resource in a ListResponse, in order.
+fn keys(s: *Suite, res: Client.Response) ?[]const []const u8 {
+    const items = j.array(j.field(s.json(res), "Resources")) orelse return null;
+    var out: std.ArrayList([]const u8) = .empty;
+    for (items) |item| {
+        out.append(s.arena, j.string(j.field(item, "id")) orelse j.string(j.field(item, "name")) orelse "") catch return null;
+    }
+    return out.items;
+}
+
+fn sorted(s: *Suite, items: []const []const u8) []const []const u8 {
+    const copy = s.arena.dupe([]const u8, items) catch return items;
+    std.mem.sort([]const u8, copy, {}, struct {
+        fn less(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.lessThan(u8, a, b);
+        }
+    }.less);
+    return copy;
+}
+
+fn joined(s: *Suite, items: []const []const u8) []const u8 {
+    return std.mem.join(s.arena, ", ", items) catch "";
 }
 
 fn serviceProviderConfig(s: *Suite) void {

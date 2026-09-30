@@ -79,6 +79,8 @@ pub fn run(s: *Suite) void {
         }
     }
 
+    if (s.caps.patch) implicitSchemas(s);
+
     // A PUT without the extension removes it.
     if (s.send(.PUT, path, .{ .body = s.userJson(.{ .user_name = user_name }) })) |r| {
         if (s.expectStatus(.must, "RFC7644 §3.5.1", r, .ok, "PUT without the extension returns 200")) {
@@ -87,4 +89,17 @@ pub fn run(s: *Suite) void {
             _ = s.check(.should, ref, !j.hasSchema(v, ext), "  the extension URN is dropped from schemas", r.body);
         }
     }
+}
+
+/// RFC 7644 §3.5.2: adding an attribute by its fully qualified name
+/// implicitly adds the extension URN to `schemas`.
+fn implicitSchemas(s: *Suite) void {
+    const ref = "RFC7644 §3.5.2";
+    const plain = s.createUser(.{ .user_name = s.userName("ext-implicit") }) orelse return;
+    const add = s.fmt("{{\"op\":\"add\",\"path\":\"{s}:employeeNumber\",\"value\":\"scimcheck-implicit\"}}", .{ext});
+    const res = s.send(.PATCH, plain.path, .{ .body = s.patchJson(add) }) orelse return;
+    if (!s.patchOk(ref, res, "PATCH add a URN-qualified extension attribute to a User without the extension")) return;
+    const v = s.fetch(ref, plain.path) orelse return;
+    _ = s.check(.must, ref, eql(j.string(j.field(j.field(v, ext), "employeeNumber")), "scimcheck-implicit"), "  the extension attribute is stored", null);
+    _ = s.check(.should, ref, j.hasSchema(v, ext), "  the extension URN is added to schemas", null);
 }
