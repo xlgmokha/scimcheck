@@ -87,6 +87,18 @@ fn uniqueness(s: *Suite, user_name: []const u8) void {
         s.expectError(.must, ref, dup, .conflict, "uniqueness", "POST a duplicate userName returns 409 uniqueness");
         s.trackCreated(s.users_endpoint, dup);
     }
+    // RFC 7643 §4.1: userName MUST be unique, so a PUT or PATCH cannot take one in use.
+    if (s.createUser(.{ .user_name = s.userName("other") })) |other| {
+        if (s.send(.PUT, other.path, .{ .body = s.userJson(.{ .user_name = user_name }) })) |res| {
+            s.expectError(.must, "RFC7644 §3.5.1", res, .conflict, "uniqueness", "PUT a userName already in use returns 409 uniqueness");
+        }
+        if (s.caps.patch) {
+            const op = s.fmt("{{\"op\":\"replace\",\"path\":\"userName\",\"value\":{f}}}", .{std.json.fmt(user_name, .{})});
+            if (s.send(.PATCH, other.path, .{ .body = s.patchJson(op) })) |res| {
+                s.expectError(.must, "RFC7644 §3.5.2", res, .conflict, "uniqueness", "PATCH a userName already in use returns 409 uniqueness");
+            }
+        }
+    }
     const upper = std.ascii.allocUpperString(s.arena, user_name) catch user_name;
     if (s.send(.POST, s.users_endpoint, .{ .body = s.userJson(.{ .user_name = upper }) })) |dup| {
         _ = s.expectStatus(.should, "RFC7643 §4.1", dup, .conflict, "userName uniqueness ignores case (caseExact false)");

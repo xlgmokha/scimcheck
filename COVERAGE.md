@@ -22,8 +22,8 @@ or configuration a client cannot see.
 | 3.4.2.4 | Pagination | pagination, search | `startIndex`/`count` defaults and bounds, `itemsPerPage`, `totalResults`, `maxResults` (creating throwaway Users to exceed it when needed), a full page walk |
 | 3.4.2.5 | Attributes on queries | attributes | `attributes` / `excludedAttributes` on lists |
 | 3.4.3 | Querying with POST | search | filter, attributes, excludedAttributes, paging and sorting in a SearchRequest; root `/.search` as INFO |
-| 3.5.1 | Replacing with PUT | users, groups, extensions, etag | replacement, readOnly `id` ignored, `meta` handling, omitted attributes cleared, required attributes enforced |
-| 3.5.2 | Modifying with PATCH | patch, groups, extensions, etag | atomicity, ordering, 200 vs 204, errors (`noTarget`, `invalidPath`, `mutability`, `invalidSyntax`), primary handling |
+| 3.5.1 | Replacing with PUT | users, groups, extensions, etag | replacement, readOnly `id` ignored, `meta` handling, omitted attributes cleared, required attributes enforced, 409 `uniqueness` |
+| 3.5.2 | Modifying with PATCH | patch, groups, extensions, etag | atomicity, ordering, 200 vs 204, errors (`noTarget`, `invalidPath`, `mutability`, `invalidSyntax`, 409 `uniqueness`), primary handling, no-op adds keep `meta.lastModified` |
 | 3.5.2.1 | add | patch, groups | with and without a path, single- and multi-valued targets, sub-attributes, value filters, duplicates |
 | 3.5.2.2 | remove | patch, groups, extensions | attributes, sub-attributes, value filters, filters that match nothing, whole multi-valued attributes, missing path |
 | 3.5.2.3 | replace | patch, groups, extensions | with and without a path, complex values, value filters, unmatched filters, adding absent attributes |
