@@ -41,7 +41,6 @@ pub fn run(s: *Suite) void {
     if (s.caps.max_results) |max| maxResults(s, max);
 
     // Walking the pages one at a time visits every fixture exactly once.
-    // Without sorting the walk relies on the server's natural order being stable.
     const sort = if (s.caps.sort) "&sortBy=userName" else "";
     var seen: std.StringHashMapUnmanaged(void) = .empty;
     var start: usize = 1;
@@ -52,7 +51,9 @@ pub fn run(s: *Suite) void {
             seen.put(s.arena, id, {}) catch {};
         };
     }
-    _ = s.check(.must, ref, seen.count() == 3, "paging with count=1 visits every result exactly once", null);
+    // Without sortBy the RFC does not promise a stable order between requests.
+    const level: check.Level = if (s.caps.sort) .must else .should;
+    _ = s.check(level, ref, seen.count() == 3, "paging with count=1 visits every result exactly once", null);
 }
 
 /// Creating more Users than this to exceed filter.maxResults is too costly;
