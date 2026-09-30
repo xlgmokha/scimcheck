@@ -93,25 +93,21 @@ fn uniqueness(s: *Suite, user_name: []const u8) void {
     }
 }
 
-/// readOnly attributes supplied by a client are ignored (RFC 7643 §2.2,
-/// RFC 7644 §3.5.1).
+/// readOnly attributes in a request body "SHALL be ignored" (RFC 7644 §3.3),
+/// so the request succeeds without them.
 fn readOnlyInput(s: *Suite) void {
-    const ref = "RFC7643 §3.1";
+    const ref = "RFC7644 §3.3";
     const body = s.userJson(.{
         .user_name = s.userName("readonly"),
         .extra = "\"id\":\"scimcheck-client-id\",\"meta\":{\"created\":\"2000-01-01T00:00:00Z\",\"resourceType\":\"Fake\"},",
     });
     const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
     s.trackCreated(s.users_endpoint, res);
-    if (res.status == .bad_request) {
-        _ = s.check(.must, ref, true, "a client-supplied id is rejected or ignored", null);
-        return;
-    }
-    if (!s.expectStatus(.must, ref, res, .created, "POST with client-supplied id and meta returns 201 (or 400)")) return;
+    if (!s.expectStatus(.must, ref, res, .created, "POST with client-supplied id and meta returns 201")) return;
     const created = s.json(res);
     _ = s.check(.must, ref, !eql(j.string(j.field(created, "id")), "scimcheck-client-id"), "the service provider assigns the id", null);
     _ = s.check(.must, ref, eql(j.string(j.path(created, "meta.resourceType")), "User"), "client-supplied meta.resourceType is ignored", null);
-    _ = s.check(.should, ref, !eql(j.string(j.path(created, "meta.created")), "2000-01-01T00:00:00Z"), "client-supplied meta.created is ignored", null);
+    _ = s.check(.must, ref, !eql(j.string(j.path(created, "meta.created")), "2000-01-01T00:00:00Z"), "client-supplied meta.created is ignored", null);
 }
 
 /// RFC 7643 §2.1 (case-insensitive names) and RFC 7644 §3.1/§8.1 (media types).
