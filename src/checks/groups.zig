@@ -49,6 +49,7 @@ pub fn run(s: *Suite) void {
         _ = s.check(.should, "RFC7643 §4.1.2", j.findBy(groups, "value", id) != null, "User.groups reflects Group membership", null);
     }
 
+    nested(s, endpoint, id);
     projection(s, path);
     queries(s, endpoint, display, f);
     if (s.caps.patch) patchMembers(s, path, f);
@@ -60,6 +61,17 @@ pub fn run(s: *Suite) void {
     }
     if (s.send(.GET, f[0].path, .{})) |user| {
         _ = s.expectStatus(.must, "RFC7644 §3.6", user, .ok, "deleting a Group does not delete its members");
+    }
+}
+
+/// RFC 7643 §4.2: a Group MAY contain other Groups ("type": "Group").
+fn nested(s: *Suite, endpoint: []const u8, parent: []const u8) void {
+    const body = s.fmt("{{\"schemas\":[\"{s}\"],\"displayName\":{f},\"members\":[{{\"value\":{f},\"type\":\"Group\"}}]}}", .{ urn.group, std.json.fmt(s.fmt("scimcheck-{s}-nested", .{s.run_id}), .{}), std.json.fmt(parent, .{}) });
+    const res = s.send(.POST, endpoint, .{ .body = body }) orelse return;
+    s.trackCreated(endpoint, res);
+    if (s.expectStatus(.may, "RFC7643 §4.2", res, .created, "a Group can have another Group as a member")) {
+        const member = j.findBy(j.array(j.field(s.json(res), "members")), "value", parent);
+        _ = s.check(.may, "RFC7643 §4.2", member != null, "  the Group member is kept", res.body);
     }
 }
 
