@@ -56,6 +56,7 @@ pub fn run(s: *Suite) void {
     addressCountry(s);
     groupsReadOnly(s);
     canonicalization(s);
+    duplicateValue(s);
 
     if (s.send(.GET, path, .{})) |got| {
         if (s.expectStatus(.must, "RFC7644 §3.4.1", got, .ok, "GET /Users/{id} returns 200")) {
@@ -330,6 +331,24 @@ fn canonicalization(s: *Suite) void {
         const stored = if (items != null and items.?.len > 0) j.string(j.field(items.?[0], "value")) else null;
         _ = s.check(.should, ref, stored != null and stored.?.len > 0, s.fmt("  {s}: a non-canonical value is not dropped", .{name}), stored);
     }
+}
+
+/// RFC 7643 §2.4: a multi-valued attribute SHOULD NOT return the same
+/// (type, value) combination more than once.
+fn duplicateValue(s: *Suite) void {
+    const ref = "RFC7643 §2.4";
+    const body = s.userJson(.{
+        .user_name = s.userName("dupvalue"),
+        .extra = "\"phoneNumbers\":[{\"value\":\"555-0199\",\"type\":\"work\"},{\"value\":\"555-0199\",\"type\":\"work\"}],",
+    });
+    const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (!s.expectStatus(.must, ref, res, .created, "POST with a duplicate (type, value) pair returns 201")) return;
+    var matches: usize = 0;
+    for (j.array(j.field(s.json(res), "phoneNumbers")) orelse &.{}) |item| {
+        if (eql(j.string(j.field(item, "value")), "555-0199") and eql(j.string(j.field(item, "type")), "work")) matches += 1;
+    }
+    _ = s.check(.should, ref, matches <= 1, "  the same (type, value) combination is not returned more than once", res.body);
 }
 
 fn replace(s: *Suite, path: []const u8, id: []const u8, user_name: []const u8, created: Client.Response) void {
