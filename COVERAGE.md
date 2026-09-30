@@ -17,7 +17,7 @@ or configuration a client cannot see.
 | 3.3.1 | Resource types | discovery | endpoints are taken from `/ResourceTypes` |
 | 3.4.1 | Retrieving a known resource | users, groups, errors | 200 with the resource, 404 for unknown and deleted resources |
 | 3.4.2.1 | Query endpoints | search | resource-type queries; root queries reported as INFO (MAY) |
-| 3.4.2.2 | Filtering | filter, groups, extensions | all 10 operators, `and`/`or`/`not`, precedence, grouping, value paths, sub-attribute and URN paths, booleans, dateTimes, `null` as unassigned, `caseExact`, case-insensitive names and operators, `invalidFilter` |
+| 3.4.2.2 | Filtering | filter, groups, extensions | all 10 operators, `and`/`or`/`not`, precedence, grouping, value paths, sub-attribute and URN paths, booleans, dateTimes (including time zone offsets), `null` as unassigned, `caseExact` for every string operator, ordering operators on boolean and binary attributes rejected, case-insensitive names and operators, `invalidFilter` |
 | 3.4.2.3 | Sorting | sort, extensions, search | ascending default, `sortOrder`, sub-attributes, multi-valued attributes by their primary (not first) value, resources without a value last when ascending and first when descending, URN names, extension attributes, with paging |
 | 3.4.2.4 | Pagination | pagination, search | `startIndex`/`count` defaults and bounds, `itemsPerPage`, `totalResults`, `Resources`, `startIndex` and `itemsPerPage` present on partial pages, `maxResults` (creating throwaway Users to exceed it when needed), a full page walk |
 | 3.4.2.5 | Attributes on queries | attributes | `attributes` / `excludedAttributes` on lists |

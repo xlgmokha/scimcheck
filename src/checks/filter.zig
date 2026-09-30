@@ -33,6 +33,7 @@ pub fn run(s: *Suite) void {
         .{ s.fmt("userName sw \"{s}\" and userName le \"{s}\"", .{ p, bob }), 2, "le includes the value", .must },
         .{ s.fmt("userName sw \"{s}\" and meta.created gt \"2000-01-01T00:00:00Z\"", .{p}), 3, "gt compares dateTimes", .must },
         .{ s.fmt("userName sw \"{s}\" and meta.lastModified lt \"2000-01-01T00:00:00Z\"", .{p}), 0, "lt compares dateTimes", .must },
+        .{ s.fmt("userName sw \"{s}\" and meta.created gt \"2000-01-01T05:00:00+05:00\"", .{p}), 3, "dateTimes with a time zone offset compare chronologically", .must },
         .{ s.fmt("userName sw \"{s}\" and active eq true", .{p}), 2, "eq compares booleans", .must },
         .{ s.fmt("userName sw \"{s}\" and active eq false", .{p}), 1, "eq false matches inactive Users", .must },
         .{ s.fmt("userName eq \"{s}-nobody\"", .{p}), 0, "no match returns 200 with totalResults 0", .must },
@@ -43,6 +44,8 @@ pub fn run(s: *Suite) void {
 
         // Case rules.
         .{ s.fmt("userName eq \"{s}\"", .{upper(s, alice)}), 1, "eq ignores case for caseExact false attributes", .must },
+        .{ s.fmt("userName sw \"{s}\"", .{upper(s, p)}), 3, "sw ignores case for caseExact false attributes", .must },
+        .{ s.fmt("userName sw \"{s}\" and userName co \"-BOB\"", .{p}), 1, "co ignores case for caseExact false attributes", .must },
         .{ s.fmt("USERNAME eq \"{s}\"", .{alice}), 1, "attribute names are case-insensitive", .must },
         .{ s.fmt("userName EQ \"{s}\"", .{alice}), 1, "operators are case-insensitive", .must },
         .{ s.fmt("userName sw \"{s}\" AND userName ew \"-bob\"", .{p}), 1, "logical operators are case-insensitive", .must },
@@ -81,6 +84,7 @@ pub fn run(s: *Suite) void {
         .{ "(userName eq \"a\"", "unbalanced parentheses" },
         .{ "userName eq \"a\" and", "a dangling logical operator" },
         .{ "active gt true", "gt on a boolean" },
+        .{ "x509Certificates.value gt \"YQ==\"", "gt on a binary attribute" },
         .{ "emails[type eq \"work\"", "an unterminated value path" },
     };
     for (invalid) |c| {
