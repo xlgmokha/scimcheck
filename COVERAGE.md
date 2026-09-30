@@ -17,7 +17,7 @@ or configuration a client cannot see.
 | 3.3.1 | Resource types | discovery | endpoints are taken from `/ResourceTypes` |
 | 3.4.1 | Retrieving a known resource | users, groups, errors | 200 with the resource, 404 for unknown and deleted resources |
 | 3.4.2.1 | Query endpoints | search | resource-type queries; root queries reported as INFO (MAY) |
-| 3.4.2.2 | Filtering | filter, groups, extensions | all 10 operators, `and`/`or`/`not`, precedence, grouping, value paths, sub-attribute and URN paths, booleans, dateTimes, `caseExact`, case-insensitive names and operators, `invalidFilter` |
+| 3.4.2.2 | Filtering | filter, groups, extensions | all 10 operators, `and`/`or`/`not`, precedence, grouping, value paths, sub-attribute and URN paths, booleans, dateTimes, `null` as unassigned, `caseExact`, case-insensitive names and operators, `invalidFilter` |
 | 3.4.2.3 | Sorting | sort, extensions, search | ascending default, `sortOrder`, sub-attributes, multi-valued attributes by their primary (not first) value, resources without a value last when ascending and first when descending, URN names, extension attributes, with paging |
 | 3.4.2.4 | Pagination | pagination, search | `startIndex`/`count` defaults and bounds, `itemsPerPage`, `totalResults`, `maxResults`, a full page walk |
 | 3.4.2.5 | Attributes on queries | attributes | `attributes` / `excludedAttributes` on lists |
@@ -49,7 +49,7 @@ or configuration a client cannot see.
 | 2.2 | Attribute characteristics | users, patch, attributes, filter, groups, discovery | readOnly (`id`, `meta`, `groups`), writeOnly/never (`password`), `returned: always` (`id`), `required`, `uniqueness`, `caseExact`, immutable member values |
 | 2.3 | Data types | users, errors, filter, patch | boolean, dateTime and reference values; wrong JSON types rejected. **Partial:** binary, decimal and integer attributes are not in the core schemas. |
 | 2.4 | Multi-valued attributes | users, patch | at most one `primary`; setting a new primary clears the others |
-| 2.5 | Unassigned and null values | users | PUT clears omitted attributes |
+| 2.5 | Unassigned and null values | users, filter | PUT clears omitted attributes; `eq null` and `ne null` in filters |
 | 3 | Resources and `schemas` | users, errors, extensions | `schemas` required and known; extension URNs listed |
 | 3.1 | Common attributes | users, filter | `id` assigned by the server and caseExact; `externalId` caseExact; `meta.resourceType/created/lastModified/location/version`; `Content-Location` |
 | 3.3 | Extensions | extensions | storage, retrieval, filtering, sorting, projection, PATCH, removal |

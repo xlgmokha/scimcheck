@@ -37,6 +37,9 @@ pub fn run(s: *Suite) void {
         .{ s.fmt("userName sw \"{s}\" and active eq false", .{p}), 1, "eq false matches inactive Users", .must },
         .{ s.fmt("userName eq \"{s}-nobody\"", .{p}), 0, "no match returns 200 with totalResults 0", .must },
         .{ s.fmt("userName eq \"{s}\\\"quote\"", .{p}), 0, "string values accept JSON escapes", .must },
+        // RFC 7643 §2.5: null and unassigned are equivalent; bob has no nickName.
+        .{ s.fmt("userName sw \"{s}\" and nickName eq null", .{p}), 1, "eq null matches unassigned attributes", .should },
+        .{ s.fmt("userName sw \"{s}\" and nickName ne null", .{p}), 2, "ne null matches assigned attributes", .should },
 
         // Case rules.
         .{ s.fmt("userName eq \"{s}\"", .{upper(s, alice)}), 1, "eq ignores case for caseExact false attributes", .must },
