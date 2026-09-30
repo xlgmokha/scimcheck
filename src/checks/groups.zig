@@ -41,8 +41,8 @@ pub fn run(s: *Suite) void {
         _ = s.check(.must, ref, j.findBy(members, "value", f[0].id) != null and j.findBy(members, "value", f[1].id) != null, "Group lists both members", null);
         const member = j.findBy(members, "value", f[0].id);
         _ = s.check(.should, ref, eql(j.string(j.field(member, "type")), "User"), "  member type is User", null);
-        const member_ref = j.string(j.field(member, "$ref")) orelse "";
-        _ = s.check(.should, ref, std.mem.endsWith(u8, member_ref, f[0].id), "  member $ref points at the User", member_ref);
+        const member_ref = j.string(j.field(member, "$ref"));
+        _ = s.check(.should, ref, member_ref != null and std.mem.endsWith(u8, member_ref.?, f[0].id), "  member $ref points at the User", member_ref orelse "$ref is missing");
     }
     if (s.fetch("RFC7643 §4.1.2", f[0].path)) |user| {
         const groups = j.array(j.field(user, "groups"));
