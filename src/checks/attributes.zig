@@ -45,7 +45,7 @@ pub fn run(s: *Suite) void {
         _ = s.check(.must, ref, j.field(v, "userName") != null and j.field(v, "displayName") != null, "  other attributes are kept", null);
     }
     if (project(s, path, "excludedAttributes=name.familyName", "excludedAttributes=name.familyName")) |v| {
-        _ = s.check(.should, ref, j.path(v, "name.familyName") == null and j.path(v, "name.givenName") != null, "  only the excluded sub-attribute is omitted", fmtValue(s, v));
+        _ = s.check(.must, ref, j.path(v, "name.familyName") == null and j.path(v, "name.givenName") != null, "  only the excluded sub-attribute is omitted", fmtValue(s, v));
     }
     if (project(s, path, "excludedAttributes=id", "excludedAttributes=id")) |v| {
         _ = s.check(.must, "RFC7643 §7", j.field(v, "id") != null, "  id cannot be excluded (returned: always)", null);
@@ -73,20 +73,20 @@ pub fn run(s: *Suite) void {
         s.trackCreated(s.users_endpoint, res);
         if (s.expectStatus(.must, "RFC7644 §3.3", res, .created, "POST ?attributes=userName returns 201")) {
             const v = s.json(res);
-            _ = s.check(.should, ref, j.field(v, "userName") != null and j.field(v, "displayName") == null, "  the POST response is projected", res.body);
+            _ = s.check(.must, ref, j.field(v, "userName") != null and j.field(v, "displayName") == null, "  the POST response is projected", res.body);
             const id = j.string(j.field(v, "id")) orelse return;
             const created = s.fmt("{s}/{s}", .{ s.users_endpoint, id });
             if (s.send(.PUT, s.fmt("{s}?excludedAttributes=emails", .{created}), .{ .body = s.userJson(.{ .user_name = user_name }) })) |put| {
                 if (s.expectStatus(.must, "RFC7644 §3.5.1", put, .ok, "PUT ?excludedAttributes=emails returns 200")) {
-                    _ = s.check(.should, ref, j.field(s.json(put), "emails") == null, "  the PUT response is projected", put.body);
+                    _ = s.check(.must, ref, j.field(s.json(put), "emails") == null, "  the PUT response is projected", put.body);
                 }
             }
             if (s.caps.patch) {
                 const op = s.patchJson("{\"op\":\"replace\",\"path\":\"displayName\",\"value\":\"Projected\"}");
                 if (s.send(.PATCH, s.fmt("{s}?attributes=displayName", .{created}), .{ .body = op })) |patch| {
-                    if (s.expectStatus(.should, "RFC7644 §3.5.2", patch, .ok, "PATCH ?attributes=displayName returns 200 with the resource")) {
+                    if (s.expectStatus(.must, "RFC7644 §3.5.2", patch, .ok, "PATCH ?attributes=displayName returns 200 with the resource")) {
                         const p = s.json(patch);
-                        _ = s.check(.should, ref, j.field(p, "displayName") != null and j.field(p, "userName") == null, "  the PATCH response is projected", patch.body);
+                        _ = s.check(.must, ref, j.field(p, "displayName") != null and j.field(p, "userName") == null, "  the PATCH response is projected", patch.body);
                     }
                 }
             }
