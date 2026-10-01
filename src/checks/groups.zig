@@ -49,7 +49,20 @@ pub fn run(s: *Suite) void {
     }
     if (s.fetch("RFC7643 §4.1.2", f[0].path)) |user| {
         const groups = j.array(j.field(user, "groups"));
-        _ = s.check(.may, "RFC7643 §4.1.2", j.findBy(groups, "value", id) != null, "User.groups reflects Group membership", null);
+        const entry = j.findBy(groups, "value", id);
+        _ = s.check(.may, "RFC7643 §4.1.2", entry != null, "User.groups reflects Group membership", null);
+        if (entry != null) {
+            // "the value sub-attribute MUST be the id, and the $ref sub-attribute
+            // must be the URI of the corresponding Group" (RFC 7643 §4.1.2).
+            const group_ref = j.string(j.field(entry, "$ref"));
+            if (group_ref != null) {
+                _ = s.check(.should, "RFC7643 §4.1.2", std.mem.endsWith(u8, group_ref.?, id), "  User.groups $ref points at the Group", group_ref);
+                _ = s.check(.must, "RFC7643 §2.3.7", check.isUri(group_ref), "  User.groups $ref is a well-formed URI", group_ref);
+            }
+            if (j.string(j.field(entry, "type"))) |t| {
+                _ = s.check(.should, "RFC7643 §4.1.2", eql(t, "direct") or eql(t, "indirect"), "  User.groups type is direct or indirect", t);
+            }
+        }
     }
 
     nested(s, endpoint, id);

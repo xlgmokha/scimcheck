@@ -548,15 +548,17 @@ pub fn isEntityTag(v: ?[]const u8) bool {
     return s.len >= 2 and s[0] == '"' and s[s.len - 1] == '"' and std.mem.findScalar(u8, s[1 .. s.len - 1], '"') == null;
 }
 
-/// An absolute or relative URI (RFC 7643 §2.3.7): `scheme://...` or a
-/// relative reference starting with "/". Not wired into any check yet -
-/// for a $ref-bearing attribute (Group member $ref, manager.$ref) to use.
+/// A URI reference (RFC 7643 §2.3.7, RFC 3986 §4.1): `scheme://...`, or a
+/// relative reference such as "/Users/1" or "Users/1". No whitespace or
+/// control characters are allowed.
 pub fn isUri(v: ?[]const u8) bool {
     const s = v orelse return false;
     if (s.len == 0) return false;
-    if (s[0] == '/') return true;
-    const colon = std.mem.findScalar(u8, s, ':') orelse return false;
-    if (colon == 0) return false;
+    for (s) |c| if (c <= ' ' or c == 0x7f) return false;
+    const colon = std.mem.findScalar(u8, s, ':') orelse return true;
+    // A colon before the first "/" makes everything up to it a scheme.
+    if (std.mem.findScalar(u8, s, '/')) |slash| if (slash < colon) return true;
+    if (colon == 0 or !std.ascii.isAlphabetic(s[0])) return false;
     for (s[0..colon]) |c| if (!std.ascii.isAlphanumeric(c) and c != '+' and c != '-' and c != '.') return false;
     return std.mem.startsWith(u8, s[colon..], "://");
 }
@@ -587,6 +589,9 @@ test isEntityTag {
 test isUri {
     try std.testing.expect(isUri("https://example.com/Users/123"));
     try std.testing.expect(isUri("/Users/123"));
+    try std.testing.expect(isUri("Users/123"));
+    try std.testing.expect(!isUri("mailto:a@b.com"));
+    try std.testing.expect(!isUri("bad scheme://x"));
     try std.testing.expect(!isUri("not a uri"));
     try std.testing.expect(!isUri(""));
     try std.testing.expect(!isUri(null));

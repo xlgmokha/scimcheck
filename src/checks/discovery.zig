@@ -174,6 +174,8 @@ fn schemaList(s: *Suite) []const Value {
         if (!s.check(.must, "RFC7643 §7", j.string(j.field(schema, "id")) != null and attributes != null, s.fmt("schema {s} has an id and attributes", .{id}), null)) continue;
         const problem = attributeProblem(s, attributes.?, "");
         _ = s.check(.must, "RFC7643 §7", problem == null, s.fmt("schema {s} attribute definitions are well formed", .{id}), problem);
+        const soft = softProblem(s, attributes.?, "");
+        _ = s.check(.should, "RFC7643 §7", soft == null, s.fmt("schema {s} complex attributes list subAttributes and references list referenceTypes", .{id}), soft);
     }
     return resources;
 }
@@ -187,6 +189,7 @@ fn attributeProblem(s: *Suite, attributes: []const Value, parent: []const u8) ?[
     const uniqueness = [_][]const u8{ "none", "server", "global" };
     for (attributes) |attr| {
         const name = j.string(j.field(attr, "name")) orelse return s.fmt("{s}: attribute without a name", .{parent});
+        if (!isAttrName(name)) return s.fmt("{s}: \"{s}\" is not a valid attribute name (RFC 7643 §2.1)", .{ parent, name });
         const qualified = if (parent.len > 0) s.fmt("{s}.{s}", .{ parent, name }) else name;
         const t = j.string(j.field(attr, "type")) orelse return s.fmt("{s}: missing type", .{qualified});
         if (!oneOf(&types, t)) return s.fmt("{s}: type \"{s}\" is not a SCIM type", .{ qualified, t });
@@ -200,12 +203,39 @@ fn attributeProblem(s: *Suite, attributes: []const Value, parent: []const u8) ?[
             }
         }
         if (std.mem.eql(u8, t, "complex")) {
-            const subs = j.array(j.field(attr, "subAttributes")) orelse return s.fmt("{s}: complex attribute without subAttributes", .{qualified});
+            // A complex attribute without subAttributes is only a SHOULD
+            // violation (RFC 7643 §7), reported by `softProblem`.
+            const subs = j.array(j.field(attr, "subAttributes")) orelse &.{};
             if (parent.len > 0) return s.fmt("{s}: complex attributes cannot nest (RFC 7643 §2.3.8)", .{qualified});
             if (attributeProblem(s, subs, qualified)) |p| return p;
         } else if (j.array(j.field(attr, "subAttributes")) != null) {
             // RFC 7643 §1.2: a simple attribute MUST NOT contain sub-attributes.
             return s.fmt("{s}: type \"{s}\" is not complex but has subAttributes (RFC 7643 §1.2)", .{ qualified, t });
+        }
+    }
+    return null;
+}
+
+/// RFC 7643 §2.1: ATTRNAME = ALPHA *(nameChar); nameChar = "$" / "-" / "_" / DIGIT / ALPHA.
+/// "$ref" is exempt: the RFC's own schemas define it, though it does not
+/// start with an ALPHA.
+fn isAttrName(name: []const u8) bool {
+    if (std.mem.eql(u8, name, "$ref")) return true;
+    if (name.len == 0 or !std.ascii.isAlphabetic(name[0])) return false;
+    for (name[1..]) |c| if (!std.ascii.isAlphanumeric(c) and c != '$' and c != '-' and c != '_') return false;
+    return true;
+}
+
+/// Definitions the RFC only recommends (RFC 7643 §7): a complex attribute
+/// "SHOULD" have subAttributes, and a reference attribute has referenceTypes.
+fn softProblem(s: *Suite, attributes: []const Value, parent: []const u8) ?[]const u8 {
+    for (attributes) |attr| {
+        const name = j.string(j.field(attr, "name")) orelse continue;
+        const qualified = if (parent.len > 0) s.fmt("{s}.{s}", .{ parent, name }) else name;
+        const t = j.string(j.field(attr, "type")) orelse continue;
+        if (std.mem.eql(u8, t, "complex")) {
+            const subs = j.array(j.field(attr, "subAttributes")) orelse return s.fmt("{s}: complex attribute without subAttributes", .{qualified});
+            if (softProblem(s, subs, qualified)) |p| return p;
         }
         if (std.mem.eql(u8, t, "reference") and j.array(j.field(attr, "referenceTypes")) == null) {
             return s.fmt("{s}: reference attribute without referenceTypes", .{qualified});
@@ -247,7 +277,8 @@ fn crossReference(s: *Suite, types: []const Value, schemas: []const Value) void 
         s.user_schema = user;
         const attrs = j.array(j.field(user, "attributes"));
         const user_name = j.findBy(attrs, "name", "userName");
-        _ = s.check(.should, "RFC7643 §8.7.1", j.boolean(j.field(user_name, "required")) == true and eql(j.string(j.field(user_name, "uniqueness")), "server"), "User.userName is required with server uniqueness", null);
+        _ = s.check(.must, "RFC7643 §4.1.1", j.boolean(j.field(user_name, "required")) == true, "User.userName is required", null);
+        _ = s.check(.should, "RFC7643 §8.7.1", eql(j.string(j.field(user_name, "uniqueness")), "server"), "User.userName has server uniqueness", null);
         const password = j.findBy(attrs, "name", "password");
         if (password != null) {
             _ = s.check(.must, "RFC7643 §4.1.1", eql(j.string(j.field(password, "returned")), "never") and eql(j.string(j.field(password, "mutability")), "writeOnly"), "User.password is writeOnly and never returned", null);
@@ -259,7 +290,7 @@ fn crossReference(s: *Suite, types: []const Value, schemas: []const Value) void 
     }
     if (j.findBy(schemas, "id", urn.group)) |group| {
         const display = j.findBy(j.array(j.field(group, "attributes")), "name", "displayName");
-        _ = s.check(.should, "RFC7643 §8.7.1", j.boolean(j.field(display, "required")) == true, "Group.displayName is required", null);
+        _ = s.check(.must, "RFC7643 §4.2", j.boolean(j.field(display, "required")) == true, "Group.displayName is required", null);
     }
 }
 

@@ -38,6 +38,14 @@ pub fn run(s: *Suite) void {
         s.expectError(.must, "RFC7643 §4.1", res, .bad_request, "invalidValue", "POST a User without the required userName returns 400 invalidValue");
         s.trackCreated(s.users_endpoint, res);
     }
+    // RFC 7643 §4.1.1: "Each User MUST include a non-empty userName value."
+    inline for (.{ "\"\"", "null" }) |value| {
+        const body = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{s},\"displayName\":\"empty username\"}}", .{ urn.user, value });
+        if (s.send(.POST, s.users_endpoint, .{ .body = body })) |res| {
+            s.expectError(.must, "RFC7643 §4.1.1", res, .bad_request, "invalidValue", "POST a User with userName " ++ value ++ " returns 400 invalidValue");
+            s.trackCreated(s.users_endpoint, res);
+        }
+    }
     const no_schemas = s.fmt("{{\"userName\":{f}}}", .{std.json.fmt(s.userName("noschemas"), .{})});
     if (s.send(.POST, s.users_endpoint, .{ .body = no_schemas })) |res| {
         s.expectError(.must, "RFC7643 §3", res, .bad_request, null, "POST a resource without the required schemas returns 400");
@@ -75,6 +83,23 @@ pub fn run(s: *Suite) void {
     if (s.send(.POST, s.users_endpoint, .{ .body = wrong_type })) |res| {
         s.expectError(.must, "RFC7643 §2.3", res, .bad_request, null, "POST a string where a boolean is defined returns 400");
         s.trackCreated(s.users_endpoint, res);
+    }
+    // RFC 7643 §2.2/§2.3: a value of the wrong plurality or JSON type.
+    const wrong_shapes = [_]struct { what: []const u8, extra: []const u8 }{
+        .{ .what = "a string where emails (multi-valued) is defined", .extra = "\"emails\":\"a@example.com\"" },
+        .{ .what = "an array where displayName (single-valued) is defined", .extra = "\"displayName\":[\"x\"]" },
+        .{ .what = "a number where displayName (a string) is defined", .extra = "\"displayName\":42" },
+    };
+    for (wrong_shapes) |shape| {
+        const body = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},{s}}}", .{ urn.user, std.json.fmt(s.userName("wrongshape"), .{}), shape.extra });
+        if (s.send(.POST, s.users_endpoint, .{ .body = body })) |res| {
+            s.trackCreated(s.users_endpoint, res);
+            if (res.status == .created) {
+                _ = s.check(.should, "RFC7643 §2.2", false, s.fmt("POST {s} returns 400", .{shape.what}), "the server accepted (and may have coerced) the value");
+            } else {
+                s.expectError(.should, "RFC7643 §2.2", res, .bad_request, null, s.fmt("POST {s} returns 400", .{shape.what}));
+            }
+        }
     }
     const bad_binary = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f},\"x509Certificates\":[{{\"value\":\"!!!not base64\"}}]}}", .{ urn.user, std.json.fmt(s.userName("badbinary"), .{}) });
     if (s.send(.POST, s.users_endpoint, .{ .body = bad_binary })) |res| {

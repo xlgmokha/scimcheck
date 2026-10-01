@@ -54,6 +54,7 @@ pub fn run(s: *Suite) void {
     unassigned(s);
     everyAttribute(s);
     caseExactValue(s);
+    externalIdNotAssigned(s);
     addressCountry(s);
     groupsReadOnly(s);
     canonicalization(s);
@@ -114,7 +115,7 @@ fn uniqueness(s: *Suite, user_name: []const u8) void {
     }
     const upper = std.ascii.allocUpperString(s.arena, user_name) catch user_name;
     if (s.send(.POST, s.users_endpoint, .{ .body = s.userJson(.{ .user_name = upper }) })) |dup| {
-        _ = s.expectStatus(.should, "RFC7643 §4.1", dup, .conflict, "userName uniqueness ignores case (caseExact false)");
+        _ = s.expectStatus(.must, "RFC7643 §4.1.1", dup, .conflict, "userName uniqueness ignores case (caseExact false)");
         s.trackCreated(s.users_endpoint, dup);
     }
 }
@@ -315,6 +316,20 @@ fn caseExactValue(s: *Suite) void {
     const id = j.string(j.field(s.json(res), "id")) orelse return;
     const got = s.fetch(ref, s.fmt("{s}/{s}", .{ s.users_endpoint, id })) orelse return;
     _ = s.check(.must, ref, eql(j.string(j.field(got, "externalId")), mixed), "  externalId keeps the submitted case", s.fmt("{f}", .{std.json.fmt(got, .{})}));
+}
+
+/// RFC 7643 §3.1: externalId "MUST NOT be specified by the service provider".
+fn externalIdNotAssigned(s: *Suite) void {
+    const ref = "RFC7643 §3.1";
+    const body = s.fmt("{{\"schemas\":[\"{s}\"],\"userName\":{f}}}", .{ urn.user, std.json.fmt(s.userName("noexternalid"), .{}) });
+    const res = s.send(.POST, s.users_endpoint, .{ .body = body }) orelse return;
+    s.trackCreated(s.users_endpoint, res);
+    if (!s.expectStatus(.must, ref, res, .created, "POST a User without externalId returns 201")) return;
+    const v = s.json(res);
+    _ = s.check(.must, ref, j.field(v, "externalId") == null, "  the service provider does not assign an externalId", res.body);
+    const id = j.string(j.field(v, "id")) orelse return;
+    const got = s.fetch(ref, s.fmt("{s}/{s}", .{ s.users_endpoint, id })) orelse return;
+    _ = s.check(.must, ref, j.field(got, "externalId") == null, "  GET does not return an externalId either", null);
 }
 
 /// RFC 7643 §4.1.2: an address's country value MUST be ISO 3166-1 alpha-2.
